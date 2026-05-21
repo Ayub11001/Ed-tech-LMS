@@ -1,0 +1,189 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Get a free hosted Postgres database in seconds: `npx create-db`
+
+generator client {
+  provider = "prisma-client-js"
+  // output   = "../generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+} 
+
+enum Role {
+  ADMIN
+  EDUCATOR
+  STUDENT
+}
+
+enum ResourceType {
+  VIDEO
+  PDF
+}
+
+enum SubmissionStatus {
+  EVALUATION
+  APPROVED
+  PASSED
+  FAILED
+}
+
+enum ComplaintStatus {
+  PENDING
+  PROCESSING
+  RESOLVED
+}
+
+model User {
+  id           String   @id @default(uuid())
+  fullName     String
+  email        String   @unique
+  password     String
+  refreshToken String
+  role         Role
+  isSuspended  Boolean  @default(false)
+  isWarned     Boolean  @default(false)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  // Relations
+  courses      Course[] // for the educators
+  enrollments  Enrollment[] // for the students
+  resources    Resource[] // for the educators
+  assignments  Assignment[] // for the educators
+  submissions  Submission[] // for the students
+  lectureViews LectureView[] // for the students
+  complaintsAsStudent  Complaint[] @relation("StudentComplaints")
+  complaintsAsEducator Complaint[] @relation("EducatorComplaints")
+
+  @@map("users")
+}
+
+model Course {
+  id           String   @id @default(uuid())
+  name         String
+  description  String
+  educatorId   String
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  // Relations
+  educator    User         @relation(fields: [educatorId], references: [id])
+  enrollments Enrollment[]
+  resources   Resource[]
+  assignments Assignment[]
+  submissions Submission[]
+
+  @@map("courses")
+}
+
+model Enrollment {
+  id        String   @id @default(uuid())
+  courseId  String
+  studentId String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  course  Course @relation(fields: [courseId], references: [id])
+  student User   @relation(fields: [studentId], references: [id])
+
+  @@unique([studentId, courseId])
+
+  @@map("enrollments")
+}
+
+model Resource {
+  id         String       @id @default(uuid())
+  name       String
+  url        String
+  type       ResourceType
+  courseId   String
+  educatorId String
+  createdAt  DateTime     @default(now())
+  updatedAt  DateTime     @updatedAt
+
+  // Relations
+  course       Course       @relation(fields: [courseId], references: [id])
+  educator     User         @relation(fields: [educatorId], references: [id])
+  assignment   Assignment?
+  lectureViews LectureView[]
+
+  @@map("resources")
+}
+
+model Assignment {
+  id             String   @id @default(uuid())
+  title          String
+  deadline       DateTime
+  credits        Int
+  passPercentage Int
+  courseId       String
+  resourceId     String   @unique
+  educatorId     String
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  
+  // Relations
+  course      Course       @relation(fields: [courseId], references: [id])
+  resource    Resource     @relation(fields: [resourceId], references: [id])
+  educator    User         @relation(fields: [educatorId], references: [id])
+  submissions Submission[]
+
+  @@map("assignments")
+}
+
+model Submission {
+  id           String           @id @default(uuid())
+  url          String
+  grade        Int?
+  status       SubmissionStatus @default(EVALUATION)
+  courseId     String
+  assignmentId String
+  studentId    String
+  createdAt    DateTime         @default(now())
+  updatedAt    DateTime         @updatedAt
+  
+  // Relations
+  assignment Assignment @relation(fields: [assignmentId], references: [id])
+  student    User       @relation(fields: [studentId], references: [id])
+  course     Course     @relation(fields: [courseId], references: [id])
+
+  @@unique([studentId, assignmentId])
+  @@map("submissions")
+}
+
+model LectureView {
+  id         String   @id @default(uuid())
+  isRevoked  Boolean  @default(false)
+  count Int @default(1)
+  resourceId String
+  studentId  String
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  // Relations
+  resource Resource @relation(fields: [resourceId], references: [id])
+  student  User     @relation(fields: [studentId], references: [id])
+
+  @@unique([studentId, resourceId])
+  @@map("lecture_views")
+}
+
+model Complaint {
+  id         String          @id @default(uuid())
+  reason     String
+  status     ComplaintStatus @default(PENDING)
+  studentId  String
+  educatorId String
+  createdAt  DateTime        @default(now())
+  updatedAt  DateTime        @updatedAt
+
+  // Relations
+  student  User @relation("StudentComplaints", fields: [studentId], references: [id])
+  educator User @relation("EducatorComplaints", fields: [educatorId], references: [id])
+
+  @@map("complaints")
+}
