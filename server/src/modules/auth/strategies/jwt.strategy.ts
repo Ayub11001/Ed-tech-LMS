@@ -4,8 +4,9 @@ import { ExtractJwt, Strategy } from "passport-jwt";
 import { PrismaService } from "src/modules/prisma/prisma.service";
 import { Request } from "express";
 import { Role } from "@prisma/client";
-import { UnauthorizedException } from "@nestjs/common";
+import { Injectable, UnauthorizedException } from "@nestjs/common";
 
+@Injectable()
 export class JwtStrategy extends PassportStrategy(Strategy) {
     constructor(
         private readonly prisma: PrismaService,
