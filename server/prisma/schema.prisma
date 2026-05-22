@@ -41,8 +41,8 @@ model User {
   fullName     String
   email        String   @unique
   password     String
-  refreshToken String
-  role         Role
+  refreshToken String?
+  role         Role     @default(STUDENT)
   isSuspended  Boolean  @default(false)
   isWarned     Boolean  @default(false)
   createdAt    DateTime @default(now())
