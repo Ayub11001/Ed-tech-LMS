@@ -5,9 +5,6 @@ import { AuthGuard } from "@nestjs/passport";
 export class JwtAuthGuard extends AuthGuard("jwt") {
 
     async canActivate(context: ExecutionContext) {
-        console.log('before super')
-        const result = await (super.canActivate(context) as Promise<boolean>)
-        console.log('after super', result)
-        return result
+        return await (super.canActivate(context) as Promise<boolean>)
     }
 }

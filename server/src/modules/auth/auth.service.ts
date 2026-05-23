@@ -6,13 +6,14 @@ import bcrypt from "bcrypt"
 import { JwtService } from '@nestjs/jwt';
 import { Role, User } from '@prisma/client';
 import { LoginDto } from './dto/login.dto';
-import { promises } from 'dns';
-import { NotFoundError } from 'rxjs';
+import { ConfigService } from '@nestjs/config';
+
 @Injectable()
 export class AuthService {
     constructor(
         private readonly prisma: PrismaService,
-        private readonly jwtService: JwtService
+        private readonly jwtService: JwtService,
+        private readonly configService: ConfigService
     ) {
 
     }
@@ -125,6 +126,50 @@ export class AuthService {
         }
     }
 
+    async refreshTokens(userId: string): Promise<{
+        authResponse: AuthResponseDto, 
+        tokens : {
+            accessToken: string;
+            refreshToken: string;
+        }
+    }> {
+        const user = await this.prisma.user.findUnique({
+            where: {id: userId},
+            select: {
+                id: true,
+                fullName: true,
+                email: true,
+                role: true,
+            }
+        });
+        if(!user) {
+            throw new NotFoundException("user not found")
+        }
+
+        const tokens = await this.generateTokens(userId, user.email);
+        const hashedToken = await bcrypt.hash(tokens.refreshToken, 8);
+        try {
+            await this.prisma.user.update({
+                where:{id: userId},
+                data: { refreshToken: hashedToken }
+            });
+        } catch (error) {
+            throw new InternalServerErrorException("Error while updating refresh token")
+        }
+
+        return {
+            authResponse: user,
+            tokens
+        }
+    }
+
+    async logout(userId: string): Promise<void> {
+        await this.prisma.user.update({
+            where: {id: userId},
+            data: { refreshToken: null }
+        })
+    }
+
     private async generateTokens(id: string, email: string): Promise<{ 
         accessToken: string, refreshToken: string 
     }> {
@@ -135,7 +180,7 @@ export class AuthService {
 
         const [accessToken, refreshToken] = await Promise.all([
             this.jwtService.signAsync(payload, { expiresIn: "60m" }),
-            this.jwtService.signAsync(payload, { expiresIn: "7d" }),
+            this.jwtService.signAsync(payload, { expiresIn: "7d", secret: this.configService.get<string>("JWT_REFRESH_SECRET") }),
         ]);
 
         return {

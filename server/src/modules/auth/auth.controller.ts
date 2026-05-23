@@ -1,4 +1,4 @@
-import { Body, Controller, Post, Res, UseGuards } from '@nestjs/common';
+import { Body, Controller, HttpCode, HttpStatus, Post, Res, UseGuards } from '@nestjs/common';
 import { AuthService } from './auth.service';
 import { RegisterDto } from './dto/register.dto';
 import type { CookieOptions, Response } from 'express';
@@ -8,6 +8,8 @@ import { Role } from '@prisma/client';
 import { RolesGuard } from 'src/common/guards/roles.guard';
 import { JwtAuthGuard } from 'src/common/guards/jwt-auth.guard';
 import { LoginDto } from './dto/login.dto';
+import { RefreshTokenGuard } from './guards/jwt-refresh.guard';
+import { GetUser } from 'src/common/decorators/get-user.decorator';
 
 @Controller('auth')
 export class AuthController {
@@ -51,6 +53,7 @@ export class AuthController {
     }
 
     @Post("login")
+    @HttpCode(HttpStatus.OK)
     async login(
         @Body() loginDto: LoginDto,
         @Res({passthrough: true}) res: Response
@@ -63,6 +66,38 @@ export class AuthController {
         return authResponse;
 
     }
+
+    @Post("refresh-tokens")
+    @UseGuards(RefreshTokenGuard)
+    @HttpCode(HttpStatus.OK)
+    async refreshToken(
+        @Res({passthrough: true}) res: Response,
+        @GetUser("id") userId: string
+    ): Promise<AuthResponseDto> {
+        const {authResponse, tokens} = await this.authService.refreshTokens(userId);
+
+        res.cookie("accessToken", tokens.accessToken, this.cookieOptions)
+        res.cookie("refreshToken", tokens.refreshToken, this.cookieOptions);
+
+        return authResponse;
+
+    }
+
+    @Post("logout")
+    @UseGuards(JwtAuthGuard)
+    @HttpCode(HttpStatus.OK)
+    async logout(
+        @Res({passthrough: true}) res: Response,
+        @GetUser("id") userId: string        
+    ): Promise<{ message: string }> {
+        await this.authService.logout(userId);
+        res.clearCookie('accessToken')
+        res.clearCookie('refreshToken');
+
+        return {message: "Logged out successfully"}
+    }
+
+
 
     
     
