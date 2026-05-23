@@ -1,10 +1,13 @@
-import { ConflictException, Injectable, InternalServerErrorException } from '@nestjs/common';
+import { ConflictException, Injectable, InternalServerErrorException, NotFoundException, UnauthorizedException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { RegisterDto } from './dto/register.dto';
 import { AuthResponseDto } from './dto/auth-response.dto';
 import bcrypt from "bcrypt"
 import { JwtService } from '@nestjs/jwt';
 import { Role, User } from '@prisma/client';
+import { LoginDto } from './dto/login.dto';
+import { promises } from 'dns';
+import { NotFoundError } from 'rxjs';
 @Injectable()
 export class AuthService {
     constructor(
@@ -15,9 +18,9 @@ export class AuthService {
     }
     private readonly SALT_ROUNDS = 12;
 
-    async register(registerDto: RegisterDto): Promise<{
+    async register(registerDto: RegisterDto, role: Role = Role.STUDENT, generateTokens: boolean = true): Promise<{
         authResponse: AuthResponseDto, 
-        tokens : {
+        tokens? : {
             accessToken: string;
             refreshToken: string
         }
@@ -29,7 +32,7 @@ export class AuthService {
         } = registerDto;
 
         const existingUser = await this.prisma.user.findFirst({
-            where: {email, fullName}
+            where: {email,}
         });
         if(existingUser) {
             throw new ConflictException("User with email and name already exists")
@@ -43,7 +46,8 @@ export class AuthService {
                 data: {
                     fullName,
                     email,
-                    password: hashedPassword
+                    password: hashedPassword,
+                    role,
                 },
                 select: {
                     id: true,
@@ -53,8 +57,14 @@ export class AuthService {
                 }
             });
 
-            const tokens = await this.generateTokens(user.id, user.email, user.role);
-            const hashedToken = await bcrypt.hash(tokens.refreshToken, this.SALT_ROUNDS);
+            if(!generateTokens) {
+                return {
+                    authResponse: user
+                }
+            }
+
+            const tokens = await this.generateTokens(user.id, user.email);
+            const hashedToken = await bcrypt.hash(tokens.refreshToken, 8);
 
             await this.prisma.user.update({
                 where: {id: user.id},
@@ -62,12 +72,7 @@ export class AuthService {
             });
 
             return {
-                authResponse: {
-                    id: user.id,
-                    email: user.email,
-                    fullName: user.fullName,
-                    role: user.role
-                },
+                authResponse: user,
                 tokens
             }
 
@@ -77,7 +82,50 @@ export class AuthService {
         }
     }
 
-    private async generateTokens(id: string, email: string, role: Role): Promise<{ 
+    async login(loginDto: LoginDto): Promise<{
+        authResponse: AuthResponseDto, 
+        tokens : {
+            accessToken: string;
+            refreshToken: string;
+        }
+    }> {
+        const {email, password} = loginDto;
+        const existingUser = await this.prisma.user.findUnique({
+            where: {email,},
+            select: {
+                id: true,
+                password: true
+            }
+        });
+        if(!existingUser) {
+            throw new NotFoundException("User with email not found");
+        }
+
+        const validPassword = await bcrypt.compare(password, existingUser.password);
+        if(!validPassword) {
+            throw new UnauthorizedException("Invalid credientials")
+        }
+
+        const tokens = await this.generateTokens(existingUser.id, email);
+        const hashedToken = await bcrypt.hash(tokens.refreshToken, 8)
+        const user = await this.prisma.user.update({
+            where: {id: existingUser.id},
+            data: { refreshToken: hashedToken, },
+            select: {
+                id: true,
+                email: true,
+                fullName: true,
+                role: true,
+            }
+        });
+
+        return {
+            authResponse: user,
+            tokens
+        }
+    }
+
+    private async generateTokens(id: string, email: string): Promise<{ 
         accessToken: string, refreshToken: string 
     }> {
         const payload = {
@@ -86,7 +134,7 @@ export class AuthService {
         };
 
         const [accessToken, refreshToken] = await Promise.all([
-            this.jwtService.signAsync({...payload, role: role}, { expiresIn: "60m" }),
+            this.jwtService.signAsync(payload, { expiresIn: "60m" }),
             this.jwtService.signAsync(payload, { expiresIn: "7d" }),
         ]);
 

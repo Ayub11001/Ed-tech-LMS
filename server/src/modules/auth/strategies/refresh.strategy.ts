@@ -8,7 +8,7 @@ import bcrypt from "bcrypt";
 import { PrismaService } from "src/modules/prisma/prisma.service";
 
 @Injectable()
-export class JwtRefreshStrategy extends PassportStrategy(Strategy) {
+export class JwtRefreshStrategy extends PassportStrategy(Strategy, 'jwt-refresh') {
     constructor(
         private readonly prisma: PrismaService,
         private readonly configService: ConfigService 
@@ -26,7 +26,7 @@ export class JwtRefreshStrategy extends PassportStrategy(Strategy) {
 
     async validate(
         req: Request, 
-        payload: {sub: string, email: string, role: Role}
+        payload: {sub: string, email: string}
     ) {
         const refreshToken: string = req.cookies?.refreshToken;
         if(!refreshToken) {
