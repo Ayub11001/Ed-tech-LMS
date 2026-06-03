@@ -25,7 +25,7 @@ enum ResourceType {
 
 enum SubmissionStatus {
   EVALUATION
-  APPROVED
+  PENDING_APPROVAL
   PASSED
   FAILED
 }
@@ -45,6 +45,7 @@ model User {
   role         Role     @default(STUDENT)
   isSuspended  Boolean  @default(false)
   isWarned     Boolean  @default(false)
+  removedAt    DateTime?  
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
@@ -54,9 +55,10 @@ model User {
   resources    Resource[] // for the educators
   assignments  Assignment[] // for the educators
   submissions  Submission[] // for the students
-  lectureViews LectureView[] // for the students
   complaintsAsStudent  Complaint[] @relation("StudentComplaints")
   complaintsAsEducator Complaint[] @relation("EducatorComplaints")
+  quizAttempts QuizAttempt[]
+  attendances Attendance[]
 
   @@map("users")
 }
@@ -75,6 +77,7 @@ model Course {
   resources   Resource[]
   assignments Assignment[]
   submissions Submission[]
+  attendances Attendance[]
 
   @@map("courses")
 }
@@ -109,7 +112,8 @@ model Resource {
   course       Course       @relation(fields: [courseId], references: [id])
   educator     User         @relation(fields: [educatorId], references: [id])
   assignment   Assignment?
-  lectureViews LectureView[]
+  quizQuestions QuizQuestion[]
+  quizAttempts QuizAttempt[]
 
   @@map("resources")
 }
@@ -119,7 +123,7 @@ model Assignment {
   title          String
   deadline       DateTime
   credits        Int
-  passPercentage Int
+  passGrade      Int
   courseId       String
   resourceId     String   @unique
   educatorId     String
@@ -139,7 +143,9 @@ model Submission {
   id           String           @id @default(uuid())
   url          String
   grade        Int?
+  reflection   String
   status       SubmissionStatus @default(EVALUATION)
+  isLate       Boolean @default(false)
   courseId     String
   assignmentId String
   studentId    String
@@ -155,22 +161,6 @@ model Submission {
   @@map("submissions")
 }
 
-model LectureView {
-  id         String   @id @default(uuid())
-  isRevoked  Boolean  @default(false)
-  count Int @default(1)
-  resourceId String
-  studentId  String
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
-
-  // Relations
-  resource Resource @relation(fields: [resourceId], references: [id])
-  student  User     @relation(fields: [studentId], references: [id])
-
-  @@unique([studentId, resourceId])
-  @@map("lecture_views")
-}
 
 model Complaint {
   id         String          @id @default(uuid())
@@ -186,4 +176,51 @@ model Complaint {
   educator User @relation("EducatorComplaints", fields: [educatorId], references: [id])
 
   @@map("complaints")
+}
+model QuizQuestion {
+  id            String   @id @default(uuid())
+  question      String
+  options       String[]
+  correctOption Int
+  resourceId    String
+  createdAt     DateTime @default(now())
+
+  // Relations
+  resource Resource @relation(fields: [resourceId], references: [id])
+
+  @@map("quiz_questions")
+}
+
+model QuizAttempt {
+  id            String   @id @default(uuid())
+  isPassed      Boolean  @default(false)
+  isCompleted     Boolean  @default(false)
+  attemptNumber Int      @default(1)
+  studentId     String
+  resourceId    String
+  createdAt     DateTime @default(now())
+
+  // Relations
+  student  User     @relation(fields: [studentId], references: [id])
+  resource Resource @relation(fields: [resourceId], references: [id])
+
+  @@map("quiz_attempts")
+}
+
+model Attendance {
+  id              String   @id @default(uuid())
+  totalLectures   Int      @default(0)
+  watchedLectures Int      @default(0)
+  isRevoked       Boolean  @default(false)
+  studentId       String
+  courseId        String
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  // Relations
+  student User   @relation(fields: [studentId], references: [id])
+  course  Course @relation(fields: [courseId], references: [id])
+
+  @@unique([studentId, courseId])
+  @@map("attendances")
 }

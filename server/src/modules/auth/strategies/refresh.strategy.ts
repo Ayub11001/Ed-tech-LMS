@@ -38,12 +38,15 @@ export class JwtRefreshStrategy extends PassportStrategy(Strategy, 'jwt-refresh'
                 id: true,
                 email: true,
                 role: true,
-                refreshToken: true
+                refreshToken: true,
+                isSuspended: true,
+                removedAt: true,
             }
         });
-        if(!user || !user.refreshToken) {
-            throw new UnauthorizedException("Invalid reafrsh-token")
-        }
+        if(!user) throw new UnauthorizedException("User not found");
+        if(!user.refreshToken) throw new UnauthorizedException("Session expired, login again")
+        if(user.removedAt) throw new UnauthorizedException("Account removed");
+        if(user.isSuspended) throw new UnauthorizedException("Account suspended");
 
         const verifyRefreshToken = await bcrypt.compare(
             refreshToken, user.refreshToken

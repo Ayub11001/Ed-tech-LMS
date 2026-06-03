@@ -92,19 +92,20 @@ export class AuthService {
     }> {
         const {email, password} = loginDto;
         const existingUser = await this.prisma.user.findUnique({
-            where: {email,},
+            where: {email, isSuspended: false, removedAt: null},
             select: {
                 id: true,
-                password: true
+                password: true,
             }
         });
         if(!existingUser) {
-            throw new NotFoundException("User with email not found");
+            throw new UnauthorizedException("Invalid credentials")
         }
+
 
         const validPassword = await bcrypt.compare(password, existingUser.password);
         if(!validPassword) {
-            throw new UnauthorizedException("Invalid credientials")
+            throw new UnauthorizedException("Invalid credentials")
         }
 
         const tokens = await this.generateTokens(existingUser.id, email);
