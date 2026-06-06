@@ -79,6 +79,8 @@ model Course {
   submissions Submission[]
   attendances Attendance[]
 
+  @@unique([name, educatorId])
+
   @@map("courses")
 }
 

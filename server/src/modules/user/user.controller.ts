@@ -47,7 +47,7 @@ export class UserController {
     // Admin endpoints
 
     
-    // Get filtered users
+    // Get filtered users or get all users if no search query
     @Get("admin")
     @Roles(Role.ADMIN)
     @HttpCode(HttpStatus.OK)
