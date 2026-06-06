@@ -5,6 +5,7 @@ import { CourseResponseDto } from './dtos/course_response.dto';
 import { Prisma, Role } from '@prisma/client';
 import { UpdateCourseDto } from './dtos/update_course.dto';
 import { CourseSearchQueryDto } from './dtos/course_search_query.dto';
+import { StudentResponseDto } from './dtos/student_response.dto';
 
 @Injectable()
 export class CoursesService {
@@ -191,6 +192,31 @@ export class CoursesService {
                 throw new NotFoundException("Course with given ID not found")
             }
             return course
+        } catch (error) {
+            if (error instanceof HttpException) throw error;
+            throw new InternalServerErrorException()
+        }
+    }
+
+    async getStudents(courseId: string): Promise<StudentResponseDto[]> {
+        try {
+            const course = await this.prisma.course.findUnique({
+                where: {id: courseId},
+            });
+            if(!course) {
+                throw new NotFoundException("Course with ID not found");
+            }
+            const students = await this.prisma.enrollment.findMany({
+                where: {
+                    courseId,
+                },
+                select: {
+                    student: {
+                        select: { id: true, fullName: true, email: true }
+                    }
+                }
+            });
+            return students.map( s => s.student );
         } catch (error) {
             if (error instanceof HttpException) throw error;
             throw new InternalServerErrorException()

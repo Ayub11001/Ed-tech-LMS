@@ -20,7 +20,6 @@ export class UserService {
                 fullName: true,
                 role: true,
                 isWarned: true,
-                isSuspended: true,
                 removedAt: true
             }
         });
@@ -43,7 +42,6 @@ export class UserService {
         } = queryDto;
 
         const where: Prisma.UserWhereInput = { removedAt: null };
-        if(isSuspended !== undefined) where.isSuspended = isSuspended;
         if(isWarned !== undefined) where.isWarned = isWarned;
         if(role) where.role = role;
 
@@ -58,7 +56,6 @@ export class UserService {
                 fullName: true,
                 role: true,
                 isWarned: true,
-                isSuspended: true,
                 removedAt: true
             }
         })
@@ -90,7 +87,6 @@ export class UserService {
                 fullName: true,
                 role: true,
                 isWarned: true,
-                isSuspended: true,
                 removedAt: true
             }
         });

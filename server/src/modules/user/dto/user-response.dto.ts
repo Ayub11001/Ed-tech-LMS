@@ -5,7 +5,6 @@ export class UserResponseDto {
     fullName: string;
     email: string;
     role: Role;
-    isSuspended: boolean;
     isWarned: boolean;
     removedAt: Date | null
 }

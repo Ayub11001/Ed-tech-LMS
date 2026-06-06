@@ -43,7 +43,6 @@ model User {
   password     String
   refreshToken String?
   role         Role     @default(STUDENT)
-  isSuspended  Boolean  @default(false)
   isWarned     Boolean  @default(false)
   removedAt    DateTime?  
   createdAt    DateTime @default(now())
@@ -88,6 +87,7 @@ model Enrollment {
   id        String   @id @default(uuid())
   courseId  String
   studentId String
+  removedAt DateTime?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -170,6 +170,7 @@ model Complaint {
   status     ComplaintStatus @default(PENDING)
   studentId  String
   educatorId String
+  removedAt  DateTime?
   createdAt  DateTime        @default(now())
   updatedAt  DateTime        @updatedAt
 
@@ -200,12 +201,15 @@ model QuizAttempt {
   attemptNumber Int      @default(1)
   studentId     String
   resourceId    String
+  answers       Int[]
+  score         Int?
   createdAt     DateTime @default(now())
 
   // Relations
   student  User     @relation(fields: [studentId], references: [id])
   resource Resource @relation(fields: [resourceId], references: [id])
 
+  @@unique([studentId, resourceId])
   @@map("quiz_attempts")
 }
 
@@ -213,9 +217,9 @@ model Attendance {
   id              String   @id @default(uuid())
   totalLectures   Int      @default(0)
   watchedLectures Int      @default(0)
-  isRevoked       Boolean  @default(false)
   studentId       String
   courseId        String
+  removedAt       DateTime?
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 

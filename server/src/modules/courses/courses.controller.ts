@@ -2,18 +2,27 @@ import { Body, Controller, Delete, Get, HttpCode, HttpStatus, Param, Patch, Post
 import { CoursesService } from './courses.service';
 import { CreateCourseDto } from './dtos/create_course.dto';
 import { Roles } from 'src/common/decorators/role.decorator';
-import { Course, Role } from '@prisma/client';
+import { Role } from '@prisma/client';
 import { JwtAuthGuard } from 'src/common/guards/jwt-auth.guard';
 import { RolesGuard } from 'src/common/guards/roles.guard';
 import { CourseResponseDto } from './dtos/course_response.dto';
 import { CourseSearchQueryDto } from './dtos/course_search_query.dto';
 import { UpdateCourseDto } from './dtos/update_course.dto';
 import { GetUser } from 'src/common/decorators/get-user.decorator';
+import { StudentResponseDto } from './dtos/student_response.dto';
 
 @UseGuards(JwtAuthGuard, RolesGuard)
 @Controller('courses')
 export class CoursesController {
   constructor(private readonly courseService: CoursesService) {}
+
+  // Educator and admin
+  @Get("/:id/students")
+  @Roles(Role.ADMIN, Role.EDUCATOR)
+  @HttpCode(HttpStatus.OK) 
+  async getStudents(@Param("id") id: string): Promise<StudentResponseDto[]> {
+    return await this.courseService.getStudents(id);
+  }
 
   // ADMIN
 
