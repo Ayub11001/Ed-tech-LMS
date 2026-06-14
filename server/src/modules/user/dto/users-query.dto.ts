@@ -10,11 +10,6 @@ export class UsersQueryDto {
     @IsOptional()
     @IsBoolean()
     @Transform(({ value }) => value === 'true')
-    isSuspended?: boolean;
-
-    @IsOptional()
-    @IsBoolean()
-    @Transform(({ value }) => value === 'true')
     isWarned?: boolean;
 
     @IsOptional()

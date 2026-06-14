@@ -6,6 +6,7 @@ import { AuthModule } from './modules/auth/auth.module';
 import { ConfigModule } from '@nestjs/config';
 import { UserModule } from './modules/user/user.module';
 import { CoursesModule } from './modules/courses/courses.module';
+import { EnrollmentModule } from './modules/enrollment/enrollment.module';
 
 @Module({
   imports: [
@@ -14,7 +15,7 @@ import { CoursesModule } from './modules/courses/courses.module';
       envFilePath: ".env"
     }),
     PrismaModule, 
-    AuthModule, UserModule, CoursesModule,
+    AuthModule, UserModule, CoursesModule, EnrollmentModule,
   ],
   controllers: [AppController],
   providers: [AppService],

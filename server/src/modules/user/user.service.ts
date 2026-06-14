@@ -1,9 +1,11 @@
-import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
+import { ConflictException, HttpException, Injectable, InternalServerErrorException, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { UserResponseDto } from './dto/user-response.dto';
 import { UsersQueryDto } from './dto/users-query.dto';
-import { Prisma } from '@prisma/client';
+import { Prisma, User, ComplaintStatus } from '@prisma/client';
 import { UpdateUserDto } from './dto/update-user.dto';
+import { PaginatedResponseDto } from 'src/common/dto/paginated_response.dto';
+import { HttpErrorByCode } from '@nestjs/common/utils/http-error-by-code.util';
 
 @Injectable()
 export class UserService {
@@ -32,9 +34,8 @@ export class UserService {
     }
 
     async getMany(queryDto: UsersQueryDto): 
-    Promise<UserResponseDto[]> {
+    Promise<PaginatedResponseDto<UserResponseDto>> {
         const {
-            isSuspended,
             isWarned,
             role,
             page = 1,
@@ -45,22 +46,31 @@ export class UserService {
         if(isWarned !== undefined) where.isWarned = isWarned;
         if(role) where.role = role;
 
-        const users = await this.prisma.user.findMany({
-            where,
-            skip: ((page-1)*limit),
-            take: limit,
-            orderBy: { createdAt: 'desc' },
-            select: {
-                id: true,
-                email: true,
-                fullName: true,
-                role: true,
-                isWarned: true,
-                removedAt: true
-            }
-        })
+        const [users, total] = await this.prisma.$transaction([
+            this.prisma.user.findMany({
+                where,
+                skip: ((page-1)*limit),
+                take: limit,
+                orderBy: { createdAt: 'desc' },
+                select: {
+                    id: true,
+                    email: true,
+                    fullName: true,
+                    role: true,
+                    isWarned: true,
+                    removedAt: true
+                }
+            }),
+
+            this.prisma.user.count({ where }),
+        ]) 
  
-        return users
+        return {
+            data: users,
+            page,
+            limit,
+            total
+        }
     }
 
     async update(userId: string, updateDto: UpdateUserDto): Promise<UserResponseDto> {
@@ -95,10 +105,34 @@ export class UserService {
     }
 
     async remove(userId: string): Promise<void> {
-        await this.prisma.user.update({
-            where: { id: userId },
-            data: { removedAt: new Date() }
-        });
-        return;
+        try {
+            await this.prisma.$transaction([
+                this.prisma.enrollment.updateMany({
+                    where: { studentId: userId },
+                    data: { removedAt: new Date() }
+                }),
+                this.prisma.attendance.updateMany({
+                    where: { studentId: userId },
+                    data: { removedAt: new Date() }
+                }),
+                this.prisma.complaint.updateMany({
+                    where: { 
+                        studentId: userId, 
+                        status: {
+                            in:  [ComplaintStatus.PENDING, ComplaintStatus.PROCESSING], 
+                        },
+                    },
+                    data: { removedAt: new Date() }
+                }),
+                this.prisma.user.update({
+                    where: { id: userId },
+                    data: { removedAt: new Date() }
+                })
+            ]);
+        } catch (error) {
+            if(error instanceof HttpException) throw error
+            if(error.code === "P2025") throw new NotFoundException("User not found")
+            throw new InternalServerErrorException("")
+        }
     }
 }

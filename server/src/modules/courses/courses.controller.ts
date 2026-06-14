@@ -6,10 +6,11 @@ import { Role } from '@prisma/client';
 import { JwtAuthGuard } from 'src/common/guards/jwt-auth.guard';
 import { RolesGuard } from 'src/common/guards/roles.guard';
 import { CourseResponseDto } from './dtos/course_response.dto';
-import { CourseSearchQueryDto } from './dtos/course_search_query.dto';
 import { UpdateCourseDto } from './dtos/update_course.dto';
 import { GetUser } from 'src/common/decorators/get-user.decorator';
 import { StudentResponseDto } from './dtos/student_response.dto';
+import { PaginatedResponseDto } from 'src/common/dto/paginated_response.dto';
+import { PaginatedSearchQueryDto } from 'src/common/dto/paginated_search_query.dto';
 
 @UseGuards(JwtAuthGuard, RolesGuard)
 @Controller('courses')
@@ -20,8 +21,11 @@ export class CoursesController {
   @Get("/:id/students")
   @Roles(Role.ADMIN, Role.EDUCATOR)
   @HttpCode(HttpStatus.OK) 
-  async getStudents(@Param("id") id: string): Promise<StudentResponseDto[]> {
-    return await this.courseService.getStudents(id);
+  async getStudents(
+    @Param("id") id: string, 
+    @Query() dto: PaginatedSearchQueryDto
+  ): Promise<PaginatedResponseDto<StudentResponseDto>> {
+    return await this.courseService.getStudents(id, dto);
   }
 
   // ADMIN
@@ -66,7 +70,8 @@ export class CoursesController {
 
   @Get()
   @HttpCode(HttpStatus.OK)
-  async getAll(@Query() dto: CourseSearchQueryDto): Promise<CourseResponseDto[]> {
+  async getAll(@Query() dto: PaginatedSearchQueryDto)
+  : Promise<PaginatedResponseDto<CourseResponseDto>> {
     return await this.courseService.getMany(dto);
   }
 

@@ -4,8 +4,9 @@ import { CreateCourseDto } from './dtos/create_course.dto';
 import { CourseResponseDto } from './dtos/course_response.dto';
 import { Prisma, Role } from '@prisma/client';
 import { UpdateCourseDto } from './dtos/update_course.dto';
-import { CourseSearchQueryDto } from './dtos/course_search_query.dto';
 import { StudentResponseDto } from './dtos/student_response.dto';
+import { PaginatedResponseDto } from 'src/common/dto/paginated_response.dto';
+import { PaginatedSearchQueryDto } from 'src/common/dto/paginated_search_query.dto';
 
 @Injectable()
 export class CoursesService {
@@ -128,24 +129,29 @@ export class CoursesService {
         }
     }
 
-    async getMany(queryDto: CourseSearchQueryDto): Promise<CourseResponseDto[]> {
+    async getMany(queryDto: PaginatedSearchQueryDto)
+    : Promise<PaginatedResponseDto<CourseResponseDto>> {
         const where: Prisma.CourseWhereInput = {}
         const { search, page, limit } = queryDto;
         if(search) where.name = { contains: search, mode: "insensitive" };
 
         try {
-            const courses = await this.prisma.course.findMany({
-                where,
-                skip: (page-1) * limit,
-                take: limit,
-                include: {
-                    educator: {
-                        select: { fullName: true, email: true }
+            const [courses, total] = await this.prisma.$transaction([
+                this.prisma.course.findMany({
+                    where,
+                    skip: (page-1) * limit,
+                    take: limit,
+                    include: {
+                        educator: {
+                            select: { fullName: true, email: true }
+                        }
                     }
-                }
-            });
+                }),
+
+                this.prisma.course.count({ where })
+            ])
     
-            return courses
+            return { data: courses, page, limit, total}
         } catch (error) {
             if (error instanceof HttpException) throw error;
 
@@ -198,25 +204,39 @@ export class CoursesService {
         }
     }
 
-    async getStudents(courseId: string): Promise<StudentResponseDto[]> {
+    // paginate
+    async getStudents(courseId: string, dto: PaginatedSearchQueryDto): Promise<PaginatedResponseDto<StudentResponseDto>> {
         try {
+            const { page, limit } = dto;
+
             const course = await this.prisma.course.findUnique({
                 where: {id: courseId},
             });
             if(!course) {
                 throw new NotFoundException("Course with ID not found");
             }
-            const students = await this.prisma.enrollment.findMany({
-                where: {
-                    courseId,
-                },
-                select: {
-                    student: {
-                        select: { id: true, fullName: true, email: true }
-                    }
-                }
-            });
-            return students.map( s => s.student );
+            const [students, total] = await this.prisma.$transaction([
+                this.prisma.enrollment.findMany({
+                    where: { courseId, removedAt: null },
+                    select: {
+                        student: {
+                            select: { id: true, fullName: true, email: true }
+                        }
+                    },
+                    skip: (page-1) * limit,
+                    take: limit,
+                }),
+
+                this.prisma.enrollment.count({
+                    where: { courseId, removedAt: null },
+                })
+            ])
+            return {
+                data: students.map( s => s.student ),
+                page,
+                limit,
+                total,
+            };
         } catch (error) {
             if (error instanceof HttpException) throw error;
             throw new InternalServerErrorException()

@@ -1,7 +1,7 @@
 import { Type } from "class-transformer";
 import { IsInt, IsOptional, IsPositive, IsString, Max } from "class-validator";
 
-export class CourseSearchQueryDto {
+export class PaginatedSearchQueryDto {
     @IsOptional()
     @IsString()
     search: string;
