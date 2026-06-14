@@ -1,3 +1,6 @@
+import { CourseResponseDto } from "src/common/dto/course_response.dto";
+import { UserResponseDto } from "src/common/dto/user-response.dto";
+
 export class EnrollmentResponseDto {
 
     id: string;
@@ -8,11 +11,3 @@ export class EnrollmentResponseDto {
     updatedAt: Date;
 }
 
-export class UserResponseDto {
-    fullName: string;
-    email: string;
-}
-export class CourseResponseDto {
-    name: string;
-    educator: UserResponseDto;
-}
