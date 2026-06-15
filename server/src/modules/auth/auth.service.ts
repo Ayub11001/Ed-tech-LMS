@@ -92,7 +92,7 @@ export class AuthService {
     }> {
         const {email, password} = loginDto;
         const existingUser = await this.prisma.user.findUnique({
-            where: {email, isSuspended: false, removedAt: null},
+            where: {email, removedAt: null},
             select: {
                 id: true,
                 password: true,

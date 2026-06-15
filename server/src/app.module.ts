@@ -8,6 +8,7 @@ import { UserModule } from './modules/user/user.module';
 import { CoursesModule } from './modules/courses/courses.module';
 import { EnrollmentModule } from './modules/enrollment/enrollment.module';
 import { AttendanceModule } from './modules/attendance/attendance.module';
+import { ComplaintsModule } from './modules/complaints/complaints.module';
 
 @Module({
   imports: [
@@ -16,7 +17,7 @@ import { AttendanceModule } from './modules/attendance/attendance.module';
       envFilePath: ".env"
     }),
     PrismaModule, 
-    AuthModule, UserModule, CoursesModule, EnrollmentModule, AttendanceModule,
+    AuthModule, UserModule, CoursesModule, EnrollmentModule, AttendanceModule, ComplaintsModule,
   ],
   controllers: [AppController],
   providers: [AppService],

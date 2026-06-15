@@ -8,6 +8,7 @@ import { GetUser } from 'src/common/decorators/get-user.decorator';
 import { UserResponseDto } from './dto/user-response.dto';
 import { UsersQueryDto } from './dto/users-query.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
+import { PaginatedResponseDto } from 'src/common/dto/paginated_response.dto';
 
 @UseGuards(JwtAuthGuard, RolesGuard)
 @Controller('users')
@@ -53,7 +54,7 @@ export class UserController {
     @HttpCode(HttpStatus.OK)
     async getAll(
         @Query() queryDto: UsersQueryDto
-    ): Promise<UserResponseDto[]> {
+    ): Promise<PaginatedResponseDto<UserResponseDto>> {
         return await this.userService.getMany(queryDto);
     }
     
