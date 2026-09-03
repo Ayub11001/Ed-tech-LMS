@@ -1,0 +1,268 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Get a free hosted Postgres database in seconds: `npx create-db`
+
+generator client {
+  provider = "prisma-client-js"
+  // output   = "../generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum Role {
+  ADMIN
+  EDUCATOR
+  STUDENT
+}
+
+enum ResourceType {
+  VIDEO
+  PDF
+}
+
+enum SubmissionStatus {
+  EVALUATION
+  PENDING_APPROVAL
+  PASSED
+  FAILED
+}
+
+enum ComplaintStatus {
+  PENDING
+  PROCESSING
+  RESOLVED
+}
+
+model User {
+  id           String    @id @default(uuid())
+  fullName     String
+  email        String    @unique
+  password     String
+  refreshToken String?
+  role         Role      @default(STUDENT)
+  isWarned     Boolean   @default(false)
+  removedAt    DateTime?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  // Relations
+  courses              Course[] // for the educators
+  enrollments          Enrollment[] // for the students
+  resources            Resource[] // for the educators
+  assignments          Assignment[] // for the educators
+  submissions          Submission[] // for the students
+  complaintsAsStudent  Complaint[]   @relation("StudentComplaints")
+  complaintsAsEducator Complaint[]   @relation("EducatorComplaints")
+  quizAttempts         QuizAttempt[]
+  attendances          Attendance[]
+
+  @@index([email])
+  @@index([role])
+  @@index([removedAt])
+  @@map("users")
+}
+
+model Course {
+  id              String   @id @default(uuid())
+  name            String
+  description     String
+  educatorId      String
+  maxSeats        Int      @default(60)
+  enrollmentCount Int      @default(0)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  // Relations
+  educator    User         @relation(fields: [educatorId], references: [id])
+  enrollments Enrollment[]
+  resources   Resource[]
+  assignments Assignment[]
+  submissions Submission[]
+  attendances Attendance[]
+
+  @@unique([name, educatorId])
+  @@index([educatorId])
+  @@index([name])
+  @@map("courses")
+}
+
+model Enrollment {
+  id        String    @id @default(uuid())
+  courseId  String
+  studentId String
+  removedAt DateTime?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  // Relations
+  course  Course @relation(fields: [courseId], references: [id])
+  student User   @relation(fields: [studentId], references: [id])
+
+  @@unique([studentId, courseId])
+  @@index([courseId])
+  @@index([studentId])
+  @@index([removedAt])
+  @@map("enrollments")
+}
+
+model Resource {
+  id         String       @id @default(uuid())
+  name       String
+  url        String
+  type       ResourceType
+  courseId   String
+  educatorId String
+  createdAt  DateTime     @default(now())
+  updatedAt  DateTime     @updatedAt
+
+  // Relations
+  course        Course         @relation(fields: [courseId], references: [id])
+  educator      User           @relation(fields: [educatorId], references: [id])
+  assignment    Assignment?
+  quizQuestions QuizQuestion[]
+  quizAttempts  QuizAttempt[]
+
+  @@index([courseId])
+  @@index([educatorId])
+  @@map("resources")
+}
+
+model Assignment {
+  id         String   @id @default(uuid())
+  title      String
+  deadline   DateTime
+  credits    Int
+  passGrade  Int
+  courseId   String
+  resourceId String   @unique
+  educatorId String
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  // Relations
+  course      Course       @relation(fields: [courseId], references: [id])
+  resource    Resource     @relation(fields: [resourceId], references: [id])
+  educator    User         @relation(fields: [educatorId], references: [id])
+  submissions Submission[]
+
+  @@index([courseId])
+  @@index([educatorId])
+  @@index([resourceId])
+  @@map("assignments")
+}
+
+model Submission {
+  id           String           @id @default(uuid())
+  url          String
+  grade        Int?
+  reflection   String
+  status       SubmissionStatus @default(EVALUATION)
+  isLate       Boolean          @default(false)
+  courseId     String
+  assignmentId String
+  studentId    String
+  createdAt    DateTime         @default(now())
+  updatedAt    DateTime         @updatedAt
+
+  // Relations
+  assignment Assignment @relation(fields: [assignmentId], references: [id])
+  student    User       @relation(fields: [studentId], references: [id])
+  course     Course     @relation(fields: [courseId], references: [id])
+
+  @@unique([studentId, assignmentId])
+  @@index([assignmentId])
+  @@index([studentId])
+  @@map("submissions")
+}
+
+model Complaint {
+  id         String          @id @default(uuid())
+  reason     String
+  status     ComplaintStatus @default(PENDING)
+  studentId  String
+  educatorId String
+  removedAt  DateTime?
+  createdAt  DateTime        @default(now())
+  updatedAt  DateTime        @updatedAt
+
+  // Relations
+  student  User @relation("StudentComplaints", fields: [studentId], references: [id])
+  educator User @relation("EducatorComplaints", fields: [educatorId], references: [id])
+
+  @@index([studentId])
+  @@index([educatorId])
+  @@index([removedAt])
+  @@index([status])
+  @@map("complaints")
+}
+
+model QuizQuestion {
+  id            String   @id @default(uuid())
+  question      String
+  options       String[]
+  correctOption Int
+  resourceId    String
+  createdAt     DateTime @default(now())
+
+  resource Resource     @relation(fields: [resourceId], references: [id], onDelete: Cascade)
+  attempts QuizAnswer[]
+
+  @@index([resourceId])
+  @@map("quiz_questions")
+}
+
+model QuizAnswer {
+  id             String @id @default(uuid())
+  quizAttemptId  String
+  quizQuestionId String
+  selectedOption Int
+
+  attempt  QuizAttempt  @relation(fields: [quizAttemptId], references: [id], onDelete: Cascade)
+  question QuizQuestion @relation(fields: [quizQuestionId], references: [id])
+
+  @@index([quizAttemptId])
+  @@index([quizQuestionId])
+  @@map("quiz_answers")
+}
+
+model QuizAttempt {
+  id         String   @id @default(uuid())
+  studentId  String
+  resourceId String
+  score      Int
+  isPassed   Boolean
+  createdAt  DateTime @default(now())
+
+  student  User         @relation(fields: [studentId], references: [id])
+  resource Resource     @relation(fields: [resourceId], references: [id])
+  answers  QuizAnswer[]
+
+  @@index([studentId])
+  @@index([resourceId])
+  @@index([studentId, resourceId])
+  @@map("quiz_attempts")
+}
+
+model Attendance {
+  id              String    @id @default(uuid())
+  totalLectures   Int       @default(0)
+  watchedLectures Int       @default(0)
+  studentId       String
+  courseId        String
+  removedAt       DateTime?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  // Relations
+  student User   @relation(fields: [studentId], references: [id])
+  course  Course @relation(fields: [courseId], references: [id])
+
+  @@unique([studentId, courseId])
+  @@index([studentId])
+  @@index([courseId])
+  @@index([removedAt])
+  @@map("attendances")
+}
