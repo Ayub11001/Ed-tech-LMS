@@ -12,36 +12,36 @@ import { PaginatedResponseDto } from 'src/common/dto/paginated_response.dto';
 @Controller('attendance')
 @UseGuards(JwtAuthGuard, RolesGuard)
 export class AttendanceController {
-    constructor(
-        private readonly attendanceService: AttendanceService
-    ) {}
+  constructor(private readonly attendanceService: AttendanceService) {}
 
-    @Get("student")
-    @Roles(Role.STUDENT)
-    async getStudentAttendance(@GetUser("id") id: string)
-    : Promise<AttendanceResponseDto[]> {
-        return await this.attendanceService.getByStudent(id);
-    }
+  @Get('student')
+  @Roles(Role.STUDENT)
+  async getStudentAttendance(
+    @GetUser('id') id: string,
+  ): Promise<AttendanceResponseDto[]> {
+    return await this.attendanceService.getByStudent(id);
+  }
 
-    @Get("educator/:courseId")
-    @Roles(Role.EDUCATOR, Role.ADMIN)
-    async getCourseAttendance(
-        @Param("courseId") id: string,
-        @Query() dto: PaginatedSearchQueryDto
-    ): Promise<PaginatedResponseDto<AttendanceResponseDto>> {
-        return await this.attendanceService.getByCourse(id, dto);
-    }
+  @Get('educator/:courseId')
+  @Roles(Role.EDUCATOR, Role.ADMIN)
+  async getCourseAttendance(
+    @Param('courseId') id: string,
+    @Query() dto: PaginatedSearchQueryDto,
+  ): Promise<PaginatedResponseDto<AttendanceResponseDto>> {
+    return await this.attendanceService.getByCourse(id, dto);
+  }
 
-    @Get("admin")
-    @Roles(Role.ADMIN)
-    async getAll(@Query() dto: PaginatedSearchQueryDto)
-    : Promise<PaginatedResponseDto<AttendanceResponseDto>> {
-        return await this.attendanceService.getAll(dto);
-    }
+  @Get('admin')
+  @Roles(Role.ADMIN)
+  async getAll(
+    @Query() dto: PaginatedSearchQueryDto,
+  ): Promise<PaginatedResponseDto<AttendanceResponseDto>> {
+    return await this.attendanceService.getAll(dto);
+  }
 
-    @Get("admin/:id")
-    @Roles(Role.ADMIN)
-    async getById(@Param("id") id: string): Promise<AttendanceResponseDto> {
-        return await this.attendanceService.getById(id);
-    }
+  @Get('admin/:id')
+  @Roles(Role.ADMIN)
+  async getById(@Param('id') id: string): Promise<AttendanceResponseDto> {
+    return await this.attendanceService.getById(id);
+  }
 }

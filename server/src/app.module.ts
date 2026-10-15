@@ -14,10 +14,15 @@ import { ComplaintsModule } from './modules/complaints/complaints.module';
   imports: [
     ConfigModule.forRoot({
       isGlobal: true,
-      envFilePath: ".env"
+      envFilePath: '.env',
     }),
-    PrismaModule, 
-    AuthModule, UserModule, CoursesModule, EnrollmentModule, AttendanceModule, ComplaintsModule,
+    PrismaModule,
+    AuthModule,
+    UserModule,
+    CoursesModule,
+    EnrollmentModule,
+    AttendanceModule,
+    ComplaintsModule,
   ],
   controllers: [AppController],
   providers: [AppService],

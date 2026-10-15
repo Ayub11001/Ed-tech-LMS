@@ -1,4 +1,15 @@
-import { Body, Controller, Get, HttpCode, HttpStatus, Param, Patch, Post, Query, UseGuards } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  HttpCode,
+  HttpStatus,
+  Param,
+  Patch,
+  Post,
+  Query,
+  UseGuards,
+} from '@nestjs/common';
 import { ComplaintsService } from './complaints.service';
 import { JwtAuthGuard } from 'src/common/guards/jwt-auth.guard';
 import { RolesGuard } from 'src/common/guards/roles.guard';
@@ -14,67 +25,69 @@ import { ResolveComplaintDto } from './dto/resolve_complaint.dto';
 @UseGuards(JwtAuthGuard, RolesGuard)
 @Controller('complaints')
 export class ComplaintsController {
-    constructor(
-        private readonly complaintsService: ComplaintsService
-    ) {}
+  constructor(private readonly complaintsService: ComplaintsService) {}
 
-    // Students
+  // Students
 
-    @Get("/students")
-    @Roles(Role.STUDENT)
-    async getStudentComplaint(@GetUser("id") id: string)
-    : Promise<ComplaintResponseDto[]> {
-        return await this.complaintsService.getByStudent(id);
-    };
+  @Get('/students')
+  @Roles(Role.STUDENT)
+  async getStudentComplaint(
+    @GetUser('id') id: string,
+  ): Promise<ComplaintResponseDto[]> {
+    return await this.complaintsService.getByStudent(id);
+  }
 
-    // Admin
-    @Get("all")
-    @Roles(Role.ADMIN)
-    async getAll(@Query() dto: ComplaintSearchQueryDto)
-    : Promise<PaginatedResponseDto<ComplaintResponseDto>> {
-        return await this.complaintsService.getAll(dto);
-    };
+  // Admin
+  @Get('all')
+  @Roles(Role.ADMIN)
+  async getAll(
+    @Query() dto: ComplaintSearchQueryDto,
+  ): Promise<PaginatedResponseDto<ComplaintResponseDto>> {
+    return await this.complaintsService.getAll(dto);
+  }
 
-    @Get("admin/:complaintId")
-    @Roles(Role.ADMIN)
-    async getOneComplaint(@Param("complaintId") id: string)
-    : Promise<ComplaintResponseDto> {
-        return await this.complaintsService.getById(id);
-    };
+  @Get('admin/:complaintId')
+  @Roles(Role.ADMIN)
+  async getOneComplaint(
+    @Param('complaintId') id: string,
+  ): Promise<ComplaintResponseDto> {
+    return await this.complaintsService.getById(id);
+  }
 
-    @Patch("process/:id")
-    @Roles(Role.ADMIN)
-    async processComplaint(@Param("id") id: string)
-    : Promise<ComplaintResponseDto> {
-        return await this.complaintsService.process(id);
-    };
+  @Patch('process/:id')
+  @Roles(Role.ADMIN)
+  async processComplaint(
+    @Param('id') id: string,
+  ): Promise<ComplaintResponseDto> {
+    return await this.complaintsService.process(id);
+  }
 
-    @Patch("resolve/:id")
-    @Roles(Role.ADMIN)
-    async resolveComplaint(
-        @Body() dto: ResolveComplaintDto,
-        @Param("id") id: string,
-    )
-    : Promise<ComplaintResponseDto> {
-        return await this.complaintsService.resolve(id, dto);
-    }
+  @Patch('resolve/:id')
+  @Roles(Role.ADMIN)
+  async resolveComplaint(
+    @Body() dto: ResolveComplaintDto,
+    @Param('id') id: string,
+  ): Promise<ComplaintResponseDto> {
+    return await this.complaintsService.resolve(id, dto);
+  }
 
-    // Educator
-    @Get("educator")
-    @Roles(Role.EDUCATOR)
-    async getEducatorComplaints(@GetUser("id") id: string)
-    : Promise<ComplaintResponseDto[]> {
-        return await this.complaintsService.getByEducator(id);
-    };
-    
-    @Post(":studentId")
-    @Roles(Role.EDUCATOR)
-    @HttpCode(HttpStatus.CREATED)
-    async create(
-        @Body() dto: RegisterComplaintDto,
-        @Param("studentId") studentId: string,
-        @GetUser("id") educatorId: string
-    ): Promise<ComplaintResponseDto> {
-        return await this.complaintsService.create(dto, studentId, educatorId);
-    };
+  // Educator
+  @Get('educator')
+  @Roles(Role.EDUCATOR)
+  async getEducatorComplaints(
+    @GetUser('id') id: string,
+  ): Promise<ComplaintResponseDto[]> {
+    return await this.complaintsService.getByEducator(id);
+  }
+
+  @Post(':studentId')
+  @Roles(Role.EDUCATOR)
+  @HttpCode(HttpStatus.CREATED)
+  async create(
+    @Body() dto: RegisterComplaintDto,
+    @Param('studentId') studentId: string,
+    @GetUser('id') educatorId: string,
+  ): Promise<ComplaintResponseDto> {
+    return await this.complaintsService.create(dto, studentId, educatorId);
+  }
 }

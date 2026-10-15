@@ -1,8 +1,8 @@
-import { Role } from "@prisma/client";
+import { Role } from '@prisma/client';
 
 export class AuthResponseDto {
-    id: string;
-    email: string;
-    fullName: string;
-    role: Role;
+  id: string;
+  email: string;
+  fullName: string;
+  role: Role;
 }
