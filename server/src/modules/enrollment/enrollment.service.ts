@@ -19,8 +19,10 @@ export class EnrollmentService {
   constructor(private readonly prisma: PrismaService) {}
 
   async create(
-    courseId: string,
-    studentId: string,
+    { studentId, courseId }: { 
+      studentId: string,
+      courseId: string 
+    }
   ): Promise<EnrollmentResponseDto> {
     try {
       const course = await this.prisma.course.findUnique({
@@ -260,7 +262,10 @@ export class EnrollmentService {
     }
   }
 
-  async removeByStudent(studentId: string, courseId: string) {
+  async removeByStudent(
+    { studentId, courseId }: {studentId: string, 
+    courseId: string}
+  ) {
     try {
       await this.prisma.$transaction(async (tx) => {
         await tx.enrollment.update({

@@ -32,7 +32,7 @@ export class EnrollmentController {
     @GetUser('id') studentId: string,
     @Param('courseId') courseId: string,
   ): Promise<EnrollmentResponseDto> {
-    return await this.enrollmentService.create(studentId, courseId);
+    return await this.enrollmentService.create({studentId, courseId});
   }
 
   @Get('')
@@ -50,7 +50,7 @@ export class EnrollmentController {
     @Param('courseId') courseId: string,
     @GetUser('id') studentId: string,
   ) {
-    await this.enrollmentService.removeByStudent(studentId, courseId);
+    await this.enrollmentService.removeByStudent({studentId, courseId});
   }
 
   // Educator endpoints
