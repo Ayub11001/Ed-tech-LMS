@@ -12,25 +12,24 @@ import { PaginatedResponseDto } from 'src/common/dto/paginated_response.dto';
 import { PaginatedSearchQueryDto } from 'src/common/dto/paginated_search_query.dto';
 import { Prisma } from '@prisma/client';
 
-const MAX_SEATS = 60;
-
 @Injectable()
 export class EnrollmentService {
   constructor(private readonly prisma: PrismaService) {}
 
-  async create(
-    { studentId, courseId }: { 
-      studentId: string,
-      courseId: string 
-    }
-  ): Promise<EnrollmentResponseDto> {
+  async create({
+    studentId,
+    courseId,
+  }: {
+    studentId: string;
+    courseId: string;
+  }): Promise<EnrollmentResponseDto> {
     try {
       const course = await this.prisma.course.findUnique({
         where: { id: courseId },
       });
       if (!course) throw new NotFoundException('Invalid courseId');
 
-      const enrollment = await this.prisma.$transaction(async (tx) => {
+      return await this.prisma.$transaction(async (tx) => {
         const existing = await tx.enrollment.findUnique({
           where: {
             studentId_courseId: { studentId, courseId },
@@ -40,11 +39,18 @@ export class EnrollmentService {
         if (existing)
           throw new ConflictException('Already enrolled in this course');
 
-        const count = await tx.enrollment.count({
-          where: { courseId, removedAt: null },
+        const claimed = await tx.course.updateMany({
+          where: {
+            id: courseId,
+            enrollmentCount: { lt: course.maxSeats },
+          },
+          data: {
+            enrollmentCount: { increment: 1 },
+          },
         });
-        if (count >= MAX_SEATS)
+        if (claimed.count === 0) {
           throw new BadRequestException('Course capacity full');
+        }
 
         const enrollment = await tx.enrollment.create({
           data: { studentId, courseId },
@@ -68,7 +74,6 @@ export class EnrollmentService {
         });
         return enrollment;
       });
-      return enrollment;
     } catch (error) {
       if (error instanceof HttpException) throw error;
       throw new InternalServerErrorException('');
@@ -236,7 +241,7 @@ export class EnrollmentService {
     try {
       await this.prisma.$transaction(async (tx) => {
         const enrollment = await tx.enrollment.update({
-          where: { id },
+          where: { id, removedAt: null },
           data: { removedAt: new Date() },
           select: { studentId: true, courseId: true },
         });
@@ -247,9 +252,23 @@ export class EnrollmentService {
               studentId: enrollment.studentId,
               courseId: enrollment.courseId,
             },
+            removedAt: null,
           },
           data: { removedAt: new Date() },
         });
+
+        const remove = await tx.course.updateMany({
+          where: {
+            id: enrollment.courseId,
+            enrollmentCount: { gt: 0 },
+          },
+          data: {
+            enrollmentCount: { decrement: 1 },
+          },
+        });
+        if (remove.count === 0) {
+          throw new BadRequestException("Could'nt remove the enrollment");
+        }
       });
     } catch (error) {
       if (error instanceof HttpException) throw error;
@@ -262,15 +281,19 @@ export class EnrollmentService {
     }
   }
 
-  async removeByStudent(
-    { studentId, courseId }: {studentId: string, 
-    courseId: string}
-  ) {
+  async removeByStudent({
+    studentId,
+    courseId,
+  }: {
+    studentId: string;
+    courseId: string;
+  }) {
     try {
       await this.prisma.$transaction(async (tx) => {
-        await tx.enrollment.update({
+        const enrollment = await tx.enrollment.update({
           where: {
             studentId_courseId: { studentId, courseId },
+            removedAt: null,
           },
           data: { removedAt: new Date() },
         });
@@ -278,9 +301,23 @@ export class EnrollmentService {
         await tx.attendance.update({
           where: {
             studentId_courseId: { studentId, courseId },
+            removedAt: null,
           },
           data: { removedAt: new Date() },
         });
+
+        const remove = await tx.course.updateMany({
+          where: {
+            id: enrollment.courseId,
+            enrollmentCount: { gt: 0 },
+          },
+          data: {
+            enrollmentCount: { decrement: 1 },
+          },
+        });
+        if (remove.count === 0) {
+          throw new BadRequestException("Could'nt remove the enrollment");
+        }
       });
     } catch (error) {
       if (error instanceof HttpException) throw error;
