@@ -1,10 +1,4 @@
-import {
-  ConflictException,
-  Injectable,
-  InternalServerErrorException,
-  NotFoundException,
-  UnauthorizedException,
-} from '@nestjs/common';
+import { HttpStatus, Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { RegisterDto } from './dto/register.dto';
 import { AuthResponseDto } from './dto/auth-response.dto';
@@ -13,6 +7,8 @@ import { JwtService } from '@nestjs/jwt';
 import { Role } from '@prisma/client';
 import { LoginDto } from './dto/login.dto';
 import { ConfigService } from '@nestjs/config';
+import { DomainException } from '../../common/errors/domain.exceptions';
+import { ErrorCodes } from '../../common/errors/error-codes';
 
 @Injectable()
 export class AuthService {
@@ -40,49 +36,48 @@ export class AuthService {
       where: { email },
     });
     if (existingUser) {
-      throw new ConflictException('User with email and name already exists');
+      throw new DomainException(
+        ErrorCodes.EMAIL_TAKEN,
+        HttpStatus.CONFLICT,
+        'User with email already exists',
+      );
     }
 
-    try {
-      const hashedPassword = await bcrypt.hash(password, this.SALT_ROUNDS);
+    const hashedPassword = await bcrypt.hash(password, this.SALT_ROUNDS);
 
-      const user = await this.prisma.user.create({
-        data: {
-          fullName,
-          email,
-          password: hashedPassword,
-          role,
-        },
-        select: {
-          id: true,
-          fullName: true,
-          email: true,
-          role: true,
-        },
-      });
+    const user = await this.prisma.user.create({
+      data: {
+        fullName,
+        email,
+        password: hashedPassword,
+        role,
+      },
+      select: {
+        id: true,
+        fullName: true,
+        email: true,
+        role: true,
+      },
+    });
 
-      if (!generateTokens) {
-        return {
-          authResponse: user,
-        };
-      }
-
-      const tokens = await this.generateTokens(user.id, user.email);
-      const hashedToken = await bcrypt.hash(tokens.refreshToken, 8);
-
-      await this.prisma.user.update({
-        where: { id: user.id },
-        data: { refreshToken: hashedToken },
-      });
-
+    if (!generateTokens) {
       return {
         authResponse: user,
-        tokens,
       };
-    } catch (error) {
-      console.error('Error during registration\n Error: ', error);
-      throw new InternalServerErrorException('Registration failed');
     }
+
+    const tokens = await this.generateTokens(user.id, user.email);
+    const hashedToken = await bcrypt.hash(tokens.refreshToken, 8);
+
+    await this.prisma.user.update({
+      where: { id: user.id },
+      data: { refreshToken: hashedToken },
+    });
+
+    return {
+      authResponse: user,
+      tokens,
+    };
   }
 
   async login(loginDto: LoginDto): Promise<{
@@ -101,12 +96,20 @@ export class AuthService {
       },
     });
     if (!existingUser) {
-      throw new UnauthorizedException('Invalid credentials');
+      throw new DomainException(
+        ErrorCodes.INVALID_CREDENTIALS,
+        HttpStatus.UNAUTHORIZED,
+        'Invalid credentials',
+      );
     }
 
     const validPassword = await bcrypt.compare(password, existingUser.password);
     if (!validPassword) {
-      throw new UnauthorizedException('Invalid credentials');
+      throw new DomainException(
+        ErrorCodes.INVALID_CREDENTIALS,
+        HttpStatus.UNAUTHORIZED,
+        'Invalid credentials',
+      );
     }
 
     const tokens = await this.generateTokens(existingUser.id, email);
@@ -145,21 +148,19 @@ export class AuthService {
       },
     });
     if (!user) {
-      throw new NotFoundException('user not found');
+      throw new DomainException(
+        ErrorCodes.RESOURCE_NOT_FOUND,
+        HttpStatus.NOT_FOUND,
+        'User not found',
+      );
     }
 
     const tokens = await this.generateTokens(userId, user.email);
     const hashedToken = await bcrypt.hash(tokens.refreshToken, 8);
-    try {
-      await this.prisma.user.update({
-        where: { id: userId },
-        data: { refreshToken: hashedToken },
-      });
-    } catch {
-      throw new InternalServerErrorException(
-        'Error while updating refresh token',
-      );
-    }
+    await this.prisma.user.update({
+      where: { id: userId },
+      data: { refreshToken: hashedToken },
+    });
 
     return {
       authResponse: user,

@@ -1,16 +1,12 @@
-import {
-  ConflictException,
-  HttpException,
-  Injectable,
-  InternalServerErrorException,
-  NotFoundException,
-} from '@nestjs/common';
+import { HttpStatus, Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { UserResponseDto } from './dto/user-response.dto';
 import { UsersQueryDto } from './dto/users-query.dto';
 import { Prisma, ComplaintStatus } from '@prisma/client';
 import { UpdateUserDto } from './dto/update-user.dto';
 import { PaginatedResponseDto } from 'src/common/dto/paginated_response.dto';
+import { DomainException } from '../../common/errors/domain.exceptions';
+import { ErrorCodes } from '../../common/errors/error-codes';
 
 @Injectable()
 export class UserService {
@@ -29,7 +25,11 @@ export class UserService {
       },
     });
     if (!user) {
-      throw new NotFoundException('User with id not found');
+      throw new DomainException(
+        ErrorCodes.RESOURCE_NOT_FOUND,
+        HttpStatus.NOT_FOUND,
+        'User with id not found',
+      );
     }
 
     return user;
@@ -79,7 +79,11 @@ export class UserService {
       where: { id: userId, removedAt: null },
     });
     if (!existingUser) {
-      throw new NotFoundException('User with id not found');
+      throw new DomainException(
+        ErrorCodes.RESOURCE_NOT_FOUND,
+        HttpStatus.NOT_FOUND,
+        'User with id not found',
+      );
     }
 
     if (updateDto.email && updateDto.email !== existingUser.email) {
@@ -87,7 +91,11 @@ export class UserService {
         where: { email: updateDto.email },
       });
       if (emailTaken)
-        throw new ConflictException('User with this email already exists');
+        throw new DomainException(
+          ErrorCodes.EMAIL_TAKEN,
+          HttpStatus.CONFLICT,
+          'User with this email already exists',
+        );
     }
 
     const updatedUser = await this.prisma.user.update({
@@ -106,38 +114,28 @@ export class UserService {
   }
 
   async remove(userId: string): Promise<void> {
-    try {
-      await this.prisma.$transaction([
-        this.prisma.enrollment.updateMany({
-          where: { studentId: userId },
-          data: { removedAt: new Date() },
-        }),
-        this.prisma.attendance.updateMany({
-          where: { studentId: userId },
-          data: { removedAt: new Date() },
-        }),
-        this.prisma.complaint.updateMany({
-          where: {
-            studentId: userId,
-            status: {
-              in: [ComplaintStatus.PENDING, ComplaintStatus.PROCESSING],
-            },
+    await this.prisma.$transaction([
+      this.prisma.enrollment.updateMany({
+        where: { studentId: userId },
+        data: { removedAt: new Date() },
+      }),
+      this.prisma.attendance.updateMany({
+        where: { studentId: userId },
+        data: { removedAt: new Date() },
+      }),
+      this.prisma.complaint.updateMany({
+        where: {
+          studentId: userId,
+          status: {
+            in: [ComplaintStatus.PENDING, ComplaintStatus.PROCESSING],
           },
-          data: { removedAt: new Date() },
-        }),
-        this.prisma.user.update({
-          where: { id: userId },
-          data: { removedAt: new Date() },
-        }),
-      ]);
-    } catch (error) {
-      if (error instanceof HttpException) throw error;
-      if (
-        error instanceof Prisma.PrismaClientKnownRequestError &&
-        error.code === 'P2025'
-      )
-        throw new NotFoundException('User not found');
-      throw new InternalServerErrorException('');
-    }
+        },
+        data: { removedAt: new Date() },
+      }),
+      this.prisma.user.update({
+        where: { id: userId },
+        data: { removedAt: new Date() },
+      }),
+    ]);
   }
 }

@@ -1,16 +1,11 @@
-import {
-  BadRequestException,
-  ConflictException,
-  HttpException,
-  Injectable,
-  InternalServerErrorException,
-  NotFoundException,
-} from '@nestjs/common';
+import { HttpStatus, Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { EnrollmentResponseDto } from './dto/enrollment_response.dto';
 import { PaginatedResponseDto } from 'src/common/dto/paginated_response.dto';
 import { PaginatedSearchQueryDto } from 'src/common/dto/paginated_search_query.dto';
 import { Prisma } from '@prisma/client';
+import { DomainException } from '../../common/errors/domain.exceptions';
+import { ErrorCodes } from '../../common/errors/error-codes';
 
 @Injectable()
 export class EnrollmentService {
@@ -23,126 +18,130 @@ export class EnrollmentService {
     studentId: string;
     courseId: string;
   }): Promise<EnrollmentResponseDto> {
-    try {
-      const course = await this.prisma.course.findUnique({
-        where: { id: courseId },
+    const course = await this.prisma.course.findUnique({
+      where: { id: courseId },
+    });
+    if (!course) {
+      throw new DomainException(
+        ErrorCodes.RESOURCE_NOT_FOUND,
+        HttpStatus.NOT_FOUND,
+        'Invalid courseId',
+      );
+    }
+
+    return await this.prisma.$transaction(async (tx) => {
+      const existing = await tx.enrollment.findUnique({
+        where: {
+          studentId_courseId: { studentId, courseId },
+          removedAt: null,
+        },
       });
-      if (!course) throw new NotFoundException('Invalid courseId');
+      if (existing) {
+        throw new DomainException(
+          ErrorCodes.ALREADY_ENROLLED,
+          HttpStatus.CONFLICT,
+          'Already enrolled in this course',
+        );
+      }
 
-      return await this.prisma.$transaction(async (tx) => {
-        const existing = await tx.enrollment.findUnique({
-          where: {
-            studentId_courseId: { studentId, courseId },
-            removedAt: null,
-          },
-        });
-        if (existing)
-          throw new ConflictException('Already enrolled in this course');
+      const claimed = await tx.course.updateMany({
+        where: {
+          id: courseId,
+          enrollmentCount: { lt: course.maxSeats },
+        },
+        data: {
+          enrollmentCount: { increment: 1 },
+        },
+      });
+      if (claimed.count === 0) {
+        throw new DomainException(
+          ErrorCodes.CAPACITY_FULL,
+          HttpStatus.BAD_REQUEST,
+          'Course capacity full',
+        );
+      }
 
-        const claimed = await tx.course.updateMany({
-          where: {
-            id: courseId,
-            enrollmentCount: { lt: course.maxSeats },
+      const enrollment = await tx.enrollment.create({
+        data: { studentId, courseId },
+        include: {
+          student: {
+            select: { fullName: true, email: true },
           },
-          data: {
-            enrollmentCount: { increment: 1 },
-          },
-        });
-        if (claimed.count === 0) {
-          throw new BadRequestException('Course capacity full');
-        }
-
-        const enrollment = await tx.enrollment.create({
-          data: { studentId, courseId },
-          include: {
-            student: {
-              select: { fullName: true, email: true },
-            },
-            course: {
-              select: {
-                name: true,
-                educator: {
-                  select: { fullName: true, email: true },
-                },
+          course: {
+            select: {
+              name: true,
+              educator: {
+                select: { fullName: true, email: true },
               },
             },
           },
-        });
-
-        await tx.attendance.create({
-          data: { studentId, courseId },
-        });
-        return enrollment;
+        },
       });
-    } catch (error) {
-      if (error instanceof HttpException) throw error;
-      throw new InternalServerErrorException('');
-    }
+
+      await tx.attendance.create({
+        data: { studentId, courseId },
+      });
+      return enrollment;
+    });
   }
 
   async getById(id: string): Promise<EnrollmentResponseDto> {
-    try {
-      const enrollment = await this.prisma.enrollment.findUnique({
-        where: { id, removedAt: null },
-        include: {
-          student: {
-            select: {
-              fullName: true,
-              email: true,
-            },
+    const enrollment = await this.prisma.enrollment.findUnique({
+      where: { id, removedAt: null },
+      include: {
+        student: {
+          select: {
+            fullName: true,
+            email: true,
           },
-          course: {
-            select: {
-              name: true,
-              educator: {
-                select: {
-                  fullName: true,
-                  email: true,
-                },
+        },
+        course: {
+          select: {
+            name: true,
+            educator: {
+              select: {
+                fullName: true,
+                email: true,
               },
             },
           },
         },
-      });
-      if (!enrollment) {
-        throw new NotFoundException('Enrollment not found');
-      }
-      return enrollment;
-    } catch (error) {
-      if (error instanceof HttpException) throw error;
-      throw new InternalServerErrorException('');
+      },
+    });
+    if (!enrollment) {
+      throw new DomainException(
+        ErrorCodes.RESOURCE_NOT_FOUND,
+        HttpStatus.NOT_FOUND,
+        'Enrollment not found',
+      );
     }
+    return enrollment;
   }
 
   async getMyEnrollments(studentId: string): Promise<EnrollmentResponseDto[]> {
-    try {
-      const enrollments = await this.prisma.enrollment.findMany({
-        where: { studentId, removedAt: null },
-        include: {
-          student: {
-            select: {
-              fullName: true,
-              email: true,
-            },
+    const enrollments = await this.prisma.enrollment.findMany({
+      where: { studentId, removedAt: null },
+      include: {
+        student: {
+          select: {
+            fullName: true,
+            email: true,
           },
-          course: {
-            select: {
-              name: true,
-              educator: {
-                select: {
-                  fullName: true,
-                  email: true,
-                },
+        },
+        course: {
+          select: {
+            name: true,
+            educator: {
+              select: {
+                fullName: true,
+                email: true,
               },
             },
           },
         },
-      });
-      return enrollments;
-    } catch (error) {
-      if (error instanceof HttpException) throw error;
-      throw new InternalServerErrorException('Something went wrong');
-    }
+      },
+    });
+    return enrollments;
   }
 
   async getByCourse(
@@ -151,45 +150,40 @@ export class EnrollmentService {
   ): Promise<PaginatedResponseDto<EnrollmentResponseDto>> {
     const { page, limit } = dto;
 
-    try {
-      const [enrollments, total] = await this.prisma.$transaction([
-        this.prisma.enrollment.findMany({
-          where: {
-            courseId,
-            removedAt: null,
+    const [enrollments, total] = await this.prisma.$transaction([
+      this.prisma.enrollment.findMany({
+        where: {
+          courseId,
+          removedAt: null,
+        },
+        include: {
+          student: {
+            select: { fullName: true, email: true },
           },
-          include: {
-            student: {
-              select: { fullName: true, email: true },
-            },
-            course: {
-              select: {
-                name: true,
-                educator: {
-                  select: { fullName: true, email: true },
-                },
+          course: {
+            select: {
+              name: true,
+              educator: {
+                select: { fullName: true, email: true },
               },
             },
           },
-          skip: (page - 1) * limit,
-          take: limit,
-        }),
+        },
+        skip: (page - 1) * limit,
+        take: limit,
+      }),
 
-        this.prisma.enrollment.count({
-          where: { courseId, removedAt: null },
-        }),
-      ]);
+      this.prisma.enrollment.count({
+        where: { courseId, removedAt: null },
+      }),
+    ]);
 
-      return {
-        data: enrollments,
-        total,
-        limit,
-        page,
-      };
-    } catch (error) {
-      if (error instanceof HttpException) throw error;
-      throw new InternalServerErrorException('Something went wrong');
-    }
+    return {
+      data: enrollments,
+      total,
+      limit,
+      page,
+    };
   }
 
   async getAll(
@@ -201,84 +195,73 @@ export class EnrollmentService {
     if (search)
       where.course = { name: { contains: search, mode: 'insensitive' } };
 
-    try {
-      const [enrollments, total] = await this.prisma.$transaction([
-        this.prisma.enrollment.findMany({
-          where,
-          skip: (page - 1) * limit,
-          take: limit,
-          include: {
-            student: {
-              select: { fullName: true, email: true },
-            },
-            course: {
-              select: {
-                name: true,
-                educator: {
-                  select: { fullName: true, email: true },
-                },
+    const [enrollments, total] = await this.prisma.$transaction([
+      this.prisma.enrollment.findMany({
+        where,
+        skip: (page - 1) * limit,
+        take: limit,
+        include: {
+          student: {
+            select: { fullName: true, email: true },
+          },
+          course: {
+            select: {
+              name: true,
+              educator: {
+                select: { fullName: true, email: true },
               },
             },
           },
-        }),
+        },
+      }),
 
-        this.prisma.enrollment.count({ where }),
-      ]);
+      this.prisma.enrollment.count({ where }),
+    ]);
 
-      return {
-        data: enrollments,
-        page,
-        limit,
-        total,
-      };
-    } catch (error) {
-      if (error instanceof HttpException) throw error;
-      throw new InternalServerErrorException('Something went wrong');
-    }
+    return {
+      data: enrollments,
+      page,
+      limit,
+      total,
+    };
   }
 
   async removeById(id: string) {
-    try {
-      await this.prisma.$transaction(async (tx) => {
-        const enrollment = await tx.enrollment.update({
-          where: { id, removedAt: null },
-          data: { removedAt: new Date() },
-          select: { studentId: true, courseId: true },
-        });
-
-        await tx.attendance.update({
-          where: {
-            studentId_courseId: {
-              studentId: enrollment.studentId,
-              courseId: enrollment.courseId,
-            },
-            removedAt: null,
-          },
-          data: { removedAt: new Date() },
-        });
-
-        const remove = await tx.course.updateMany({
-          where: {
-            id: enrollment.courseId,
-            enrollmentCount: { gt: 0 },
-          },
-          data: {
-            enrollmentCount: { decrement: 1 },
-          },
-        });
-        if (remove.count === 0) {
-          throw new BadRequestException("Could'nt remove the enrollment");
-        }
+    await this.prisma.$transaction(async (tx) => {
+      const enrollment = await tx.enrollment.update({
+        where: { id, removedAt: null },
+        data: { removedAt: new Date() },
+        select: { studentId: true, courseId: true },
       });
-    } catch (error) {
-      if (error instanceof HttpException) throw error;
-      if (
-        error instanceof Prisma.PrismaClientKnownRequestError &&
-        error.code === 'P2025'
-      )
-        throw new NotFoundException('Enrollment not found');
-      throw new InternalServerErrorException();
-    }
+
+      await tx.attendance.update({
+        where: {
+          studentId_courseId: {
+            studentId: enrollment.studentId,
+            courseId: enrollment.courseId,
+          },
+          removedAt: null,
+        },
+        data: { removedAt: new Date() },
+      });
+
+      const remove = await tx.course.updateMany({
+        where: {
+          id: enrollment.courseId,
+          enrollmentCount: { gt: 0 },
+        },
+        data: {
+          enrollmentCount: { decrement: 1 },
+        },
+      });
+      if (remove.count === 0) {
+        throw new DomainException(
+          ErrorCodes.CONFLICT,
+          HttpStatus.BAD_REQUEST,
+          "Couldn't remove the enrollment",
+        );
+      }
+    });
   }
 
   async removeByStudent({
@@ -288,45 +271,39 @@ export class EnrollmentService {
     studentId: string;
     courseId: string;
   }) {
-    try {
-      await this.prisma.$transaction(async (tx) => {
-        const enrollment = await tx.enrollment.update({
-          where: {
-            studentId_courseId: { studentId, courseId },
-            removedAt: null,
-          },
-          data: { removedAt: new Date() },
-        });
-
-        await tx.attendance.update({
-          where: {
-            studentId_courseId: { studentId, courseId },
-            removedAt: null,
-          },
-          data: { removedAt: new Date() },
-        });
-
-        const remove = await tx.course.updateMany({
-          where: {
-            id: enrollment.courseId,
-            enrollmentCount: { gt: 0 },
-          },
-          data: {
-            enrollmentCount: { decrement: 1 },
-          },
-        });
-        if (remove.count === 0) {
-          throw new BadRequestException("Could'nt remove the enrollment");
-        }
+    await this.prisma.$transaction(async (tx) => {
+      const enrollment = await tx.enrollment.update({
+        where: {
+          studentId_courseId: { studentId, courseId },
+          removedAt: null,
+        },
+        data: { removedAt: new Date() },
       });
-    } catch (error) {
-      if (error instanceof HttpException) throw error;
-      if (
-        error instanceof Prisma.PrismaClientKnownRequestError &&
-        error.code === 'P2025'
-      )
-        throw new NotFoundException('Enrollment not found');
-      throw new InternalServerErrorException('');
-    }
+
+      await tx.attendance.update({
+        where: {
+          studentId_courseId: { studentId, courseId },
+          removedAt: null,
+        },
+        data: { removedAt: new Date() },
+      });
+
+      const remove = await tx.course.updateMany({
+        where: {
+          id: enrollment.courseId,
+          enrollmentCount: { gt: 0 },
+        },
+        data: {
+          enrollmentCount: { decrement: 1 },
+        },
+      });
+      if (remove.count === 0) {
+        throw new DomainException(
+          ErrorCodes.CONFLICT,
+          HttpStatus.BAD_REQUEST,
+          "Couldn't remove the enrollment",
+        );
+      }
+    });
   }
 }
