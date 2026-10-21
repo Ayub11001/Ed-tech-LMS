@@ -1,14 +1,25 @@
 import { Injectable, NestMiddleware } from '@nestjs/common';
+import { randomUUID } from 'node:crypto';
 import { NextFunction, Request, Response } from 'express';
+
+export const REQUEST_ID_HEADER = 'x-request-id';
+export const SAFE_REQUEST_ID = /^[A-Za-z0-9_-]{1,64}$/;
 
 @Injectable()
 export class RequestMiddleware implements NestMiddleware {
   use(req: Request, res: Response, next: NextFunction): void {
-    // pino-http already resolved req.id (from inbound header or generated) via genReqId
-    const requestId = String((req as Request & { id?: string }).id ?? '');
+    const reqWithId = req as Request & { id?: string };
 
-    (req as Request & { requestId: string }).requestId = requestId;
-    res.setHeader('X-Request-Id', requestId);
+    const rawHeader = req.headers[REQUEST_ID_HEADER];
+    const clientId = Array.isArray(rawHeader) ? rawHeader[0] : rawHeader;
+
+    const requestId =
+      reqWithId.id ??
+      (clientId && SAFE_REQUEST_ID.test(clientId) ? clientId : randomUUID());
+
+    reqWithId.id = requestId;
+    req.headers[REQUEST_ID_HEADER] = requestId;
+    res.setHeader(REQUEST_ID_HEADER, requestId);
 
     next();
   }

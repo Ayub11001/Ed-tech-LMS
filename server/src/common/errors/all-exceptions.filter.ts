@@ -23,7 +23,7 @@ type Envelope = {
 };
 
 const STATUS_TO_CODE: Record<number, ErrorCode> = {
-  [HttpStatus.BAD_REQUEST]: ErrorCodes.VALIDATION_ERROR,
+  [HttpStatus.BAD_REQUEST]: ErrorCodes.BAD_REQUEST,
   [HttpStatus.UNAUTHORIZED]: ErrorCodes.UNAUTHORIZED,
   [HttpStatus.FORBIDDEN]: ErrorCodes.FORBIDDEN,
   [HttpStatus.NOT_FOUND]: ErrorCodes.RESOURCE_NOT_FOUND,
@@ -40,14 +40,14 @@ export class AllExceptionsFilter implements ExceptionFilter {
   catch(exception: unknown, host: ArgumentsHost): void {
     const { httpAdapter } = this.httpAdapterHost;
     const ctx = host.switchToHttp();
-    const req = ctx.getRequest<Request & { requestId?: string }>();
+    const req = ctx.getRequest<Request & { id?: string }>();
     const res = ctx.getResponse<Response>();
 
     const { statusCode, code, message, details } = this.translate(
       exception,
       req.originalUrl,
     );
-    const requestId = req.requestId ?? 'unknown';
+    const requestId = req.id || 'unknown';
 
     const envelope: Envelope = {
       statusCode,
@@ -135,6 +135,9 @@ export class AllExceptionsFilter implements ExceptionFilter {
   }
 
   private codeForStatus(status: number): ErrorCode {
-    return STATUS_TO_CODE[status] ?? ErrorCodes.INTERNAL_ERROR;
+    if (status >= 500) {
+      return STATUS_TO_CODE[status] ?? ErrorCodes.INTERNAL_ERROR;
+    }
+    return STATUS_TO_CODE[status] ?? ErrorCodes.CLIENT_ERROR;
   }
 }

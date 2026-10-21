@@ -13,6 +13,8 @@ export const ErrorCodes = {
   CONFLICT: 'CONFLICT',
   RELATED_RESOURCE_EXISTS: 'RELATED_RESOURCE_EXISTS',
   INTERNAL_ERROR: 'INTERNAL_ERROR',
+  BAD_REQUEST: 'BAD_REQUEST',
+  CLIENT_ERROR: 'CLIENT_ERROR',
 } as const;
 
 export type ErrorCode = (typeof ErrorCodes)[keyof typeof ErrorCodes];

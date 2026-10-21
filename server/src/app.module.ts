@@ -14,10 +14,11 @@ import { EnrollmentModule } from './modules/enrollment/enrollment.module';
 import { AttendanceModule } from './modules/attendance/attendance.module';
 import { ComplaintsModule } from './modules/complaints/complaints.module';
 import { AllExceptionsFilter } from './common/errors/all-exceptions.filter';
-import { RequestMiddleware } from './common/middlewares/request-id.middleware';
-
-const REQUEST_ID_HEADER = 'x-request-id';
-const SAFE_REQUEST_ID = /^[A-Za-z0-9_-]{1,64}$/;
+import {
+  REQUEST_ID_HEADER,
+  RequestMiddleware,
+  SAFE_REQUEST_ID,
+} from './common/middlewares/request-id.middleware';
 
 @Module({
   imports: [
