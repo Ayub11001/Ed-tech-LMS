@@ -66,14 +66,15 @@ model User {
 }
 
 model Course {
-  id              String   @id @default(uuid())
+  id              String    @id @default(uuid())
   name            String
   description     String
   educatorId      String
-  maxSeats        Int      @default(60)
-  enrollmentCount Int      @default(0)
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  maxSeats        Int       @default(60)
+  enrollmentCount Int       @default(0)
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  removedAt       DateTime?
 
   // Relations
   educator    User         @relation(fields: [educatorId], references: [id])
@@ -86,6 +87,7 @@ model Course {
   @@unique([name, educatorId])
   @@index([educatorId])
   @@index([name])
+  @@index([removedAt])
   @@map("courses")
 }
 

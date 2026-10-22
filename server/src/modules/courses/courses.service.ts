@@ -19,8 +19,9 @@ export class CoursesService {
 
     const educator = await this.prisma.user.findUnique({
       where: {
-        id: educatorId,
+        id: dto.educatorId,
         role: Role.EDUCATOR,
+        removedAt: null,
       },
       select: {
         fullName: true,
@@ -53,7 +54,7 @@ export class CoursesService {
     courseId: string,
   ): Promise<CourseResponseDto> {
     const course = await this.prisma.course.findUnique({
-      where: { id: courseId },
+      where: { id: courseId, removedAt: null },
     });
     if (!course) {
       throw new DomainException(
@@ -65,7 +66,7 @@ export class CoursesService {
 
     if (dto.educatorId) {
       const educator = await this.prisma.user.findUnique({
-        where: { id: dto.educatorId },
+        where: { id: dto.educatorId, removedAt: null },
         select: {
           id: true,
           fullName: true,
@@ -96,8 +97,12 @@ export class CoursesService {
 
   async delete(courseId: string): Promise<void> {
     const course = await this.prisma.course.findUnique({
-      where: { id: courseId },
-      select: { _count: { select: { enrollments: true } } },
+      where: { id: courseId, removedAt: null },
+      select: {
+        _count: {
+          select: { enrollments: { where: { removedAt: null } } },
+        },
+      },
     });
     if (!course) {
       throw new DomainException(
@@ -114,15 +119,23 @@ export class CoursesService {
       );
     }
 
-    await this.prisma.course.delete({
-      where: { id: courseId },
+    await this.prisma.$transaction(async (tx) => {
+      await tx.attendance.updateMany({
+        where: { courseId, removedAt: null },
+        data: { removedAt: new Date() },
+      });
+
+      await tx.course.update({
+        where: { id: courseId },
+        data: { removedAt: new Date(), enrollmentCount: 0 },
+      });
     });
   }
 
   async getMany(
     queryDto: PaginatedSearchQueryDto,
   ): Promise<PaginatedResponseDto<CourseResponseDto>> {
-    const where: Prisma.CourseWhereInput = {};
+    const where: Prisma.CourseWhereInput = { removedAt: null };
     const { search, page, limit } = queryDto;
     if (search) where.name = { contains: search, mode: 'insensitive' };
 
@@ -146,7 +159,7 @@ export class CoursesService {
 
   async getByEducatorId(educatorId: string): Promise<CourseResponseDto[]> {
     const educator = await this.prisma.user.findUnique({
-      where: { id: educatorId, role: Role.EDUCATOR },
+      where: { id: educatorId, role: Role.EDUCATOR, removedAt: null },
     });
     if (!educator) {
       throw new DomainException(
@@ -157,7 +170,7 @@ export class CoursesService {
     }
 
     const courses = await this.prisma.course.findMany({
-      where: { educatorId },
+      where: { educatorId, removedAt: null },
       include: {
         educator: {
           select: { fullName: true, email: true },
@@ -169,7 +182,7 @@ export class CoursesService {
 
   async getOne(courseId: string): Promise<CourseResponseDto> {
     const course = await this.prisma.course.findUnique({
-      where: { id: courseId },
+      where: { id: courseId, removedAt: null },
       include: {
         educator: {
           select: { fullName: true, email: true },
@@ -194,13 +207,13 @@ export class CoursesService {
     const { page, limit } = dto;
 
     const course = await this.prisma.course.findUnique({
-      where: { id: courseId },
+      where: { id: courseId, removedAt: null },
     });
     if (!course) {
       throw new DomainException(
         ErrorCodes.RESOURCE_NOT_FOUND,
         HttpStatus.NOT_FOUND,
-        'Course with ID not found',
+        'Course with id not found',
       );
     }
     const [students, total] = await this.prisma.$transaction([

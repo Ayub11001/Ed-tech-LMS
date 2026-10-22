@@ -11,6 +11,7 @@ import {
   Query,
   UseGuards,
 } from '@nestjs/common';
+import { ApiOperation, ApiParam, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { CoursesService } from './courses.service';
 import { CreateCourseDto } from './dtos/create_course.dto';
 import { Roles } from 'src/common/decorators/role.decorator';
@@ -23,7 +24,11 @@ import { GetUser } from 'src/common/decorators/get-user.decorator';
 import { StudentResponseDto } from './dtos/student_response.dto';
 import { PaginatedResponseDto } from 'src/common/dto/paginated_response.dto';
 import { PaginatedSearchQueryDto } from 'src/common/dto/paginated_search_query.dto';
+import { ApiAuth } from 'src/common/swagger/decorators/api-auth.decorator';
+import { ApiErrorResponses } from 'src/common/swagger/decorators/api-error-responses.decorator';
+import { ApiPaginatedResponse } from 'src/common/swagger/decorators/api-paginated-response.decorator';
 
+@ApiTags('courses')
 @UseGuards(JwtAuthGuard, RolesGuard)
 @Controller('courses')
 export class CoursesController {
@@ -33,6 +38,20 @@ export class CoursesController {
   @Get('/:id/students')
   @Roles(Role.ADMIN, Role.EDUCATOR)
   @HttpCode(HttpStatus.OK)
+  @ApiAuth()
+  @ApiOperation({
+    summary: 'Get students enrolled in a course',
+    description:
+      'Returns a paginated list of active students. Only accessible to the course educator or admins.',
+  })
+  @ApiParam({
+    name: 'id',
+    type: String,
+    format: 'uuid',
+    description: 'Course ID',
+  })
+  @ApiPaginatedResponse(StudentResponseDto)
+  @ApiErrorResponses()
   async getStudents(
     @Param('id') id: string,
     @Query() dto: PaginatedSearchQueryDto,
@@ -44,6 +63,17 @@ export class CoursesController {
 
   @Post()
   @Roles(Role.ADMIN)
+  @ApiAuth()
+  @ApiOperation({
+    summary: 'Create a new course (admin only)',
+    description: 'Creates a course owned by the specified educator.',
+  })
+  @ApiResponse({
+    status: 201,
+    description: 'Course created successfully',
+    type: CourseResponseDto,
+  })
+  @ApiErrorResponses({ 404: 'Educator does not exist' })
   async createCourse(@Body() dto: CreateCourseDto): Promise<CourseResponseDto> {
     return await this.courseService.create(dto);
   }
@@ -51,6 +81,24 @@ export class CoursesController {
   @Get('/admin/:id')
   @Roles(Role.ADMIN)
   @HttpCode(HttpStatus.OK)
+  @ApiAuth()
+  @ApiOperation({
+    summary: 'Get courses by educator ID (admin only)',
+    description: 'Returns all active courses owned by the specified educator.',
+  })
+  @ApiParam({
+    name: 'id',
+    type: String,
+    format: 'uuid',
+    description: 'Educator user ID',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'List of courses',
+    type: CourseResponseDto,
+    isArray: true,
+  })
+  @ApiErrorResponses()
   async getEducatorCoursesAdmin(
     @Param('id') id: string,
   ): Promise<CourseResponseDto[]> {
@@ -60,6 +108,23 @@ export class CoursesController {
   @Patch('/:id')
   @Roles(Role.ADMIN)
   @HttpCode(HttpStatus.OK)
+  @ApiAuth()
+  @ApiOperation({
+    summary: 'Update a course (admin only)',
+    description: 'Updates course details or reassigns the educator.',
+  })
+  @ApiParam({
+    name: 'id',
+    type: String,
+    format: 'uuid',
+    description: 'Course ID',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Course updated successfully',
+    type: CourseResponseDto,
+  })
+  @ApiErrorResponses({ 404: 'Course or educator not found' })
   async update(@Param('id') id: string, @Body() dto: UpdateCourseDto) {
     return await this.courseService.update(dto, id);
   }
@@ -67,6 +132,20 @@ export class CoursesController {
   @Delete('/:id')
   @Roles(Role.ADMIN)
   @HttpCode(HttpStatus.NO_CONTENT)
+  @ApiAuth()
+  @ApiOperation({
+    summary: 'Delete a course (admin only)',
+    description:
+      'Soft deletes the course. Fails if active students are enrolled.',
+  })
+  @ApiParam({
+    name: 'id',
+    type: String,
+    format: 'uuid',
+    description: 'Course ID',
+  })
+  @ApiResponse({ status: 204, description: 'Course deleted successfully' })
+  @ApiErrorResponses({ 409: 'Students are already enrolled' })
   async delete(@Param('id') id: string): Promise<void> {
     return await this.courseService.delete(id);
   }
@@ -76,6 +155,19 @@ export class CoursesController {
   @Get('/edu')
   @Roles(Role.EDUCATOR)
   @HttpCode(HttpStatus.OK)
+  @ApiAuth()
+  @ApiOperation({
+    summary: 'Get current educator courses',
+    description:
+      'Returns all active courses owned by the authenticated educator.',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'List of courses',
+    type: CourseResponseDto,
+    isArray: true,
+  })
+  @ApiErrorResponses()
   async getEducatorCourses(
     @GetUser('id') id: string,
   ): Promise<CourseResponseDto[]> {
@@ -86,6 +178,14 @@ export class CoursesController {
 
   @Get()
   @HttpCode(HttpStatus.OK)
+  @ApiAuth()
+  @ApiOperation({
+    summary: 'List all active courses',
+    description:
+      'Returns a paginated list of active courses with optional search.',
+  })
+  @ApiPaginatedResponse(CourseResponseDto)
+  @ApiErrorResponses()
   async getAll(
     @Query() dto: PaginatedSearchQueryDto,
   ): Promise<PaginatedResponseDto<CourseResponseDto>> {
@@ -94,6 +194,23 @@ export class CoursesController {
 
   @Get('/:id')
   @HttpCode(HttpStatus.OK)
+  @ApiAuth()
+  @ApiOperation({
+    summary: 'Get course details',
+    description: 'Returns details for an active course.',
+  })
+  @ApiParam({
+    name: 'id',
+    type: String,
+    format: 'uuid',
+    description: 'Course ID',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Course details',
+    type: CourseResponseDto,
+  })
+  @ApiErrorResponses()
   async getCourseById(@Param('id') id: string): Promise<CourseResponseDto> {
     return await this.courseService.getOne(id);
   }

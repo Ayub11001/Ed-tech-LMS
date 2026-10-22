@@ -8,6 +8,7 @@ import { PaginatedResponseDto } from 'src/common/dto/paginated_response.dto';
 import { ResolveComplaintDto } from './dto/resolve_complaint.dto';
 import { DomainException } from '../../common/errors/domain.exceptions';
 import { ErrorCodes } from '../../common/errors/error-codes';
+import { releaseSeats } from 'src/common/helpers/release-seats';
 
 @Injectable()
 export class ComplaintsService {
@@ -174,15 +175,7 @@ export class ComplaintsService {
       const studentId = existingComplaint.studentId;
 
       if (resolution === 'REMOVED') {
-        await tx.enrollment.updateMany({
-          where: { studentId, removedAt: null },
-          data: { removedAt: new Date() },
-        });
-
-        await tx.attendance.updateMany({
-          where: { studentId, removedAt: null },
-          data: { removedAt: new Date() },
-        });
+        await releaseSeats(tx, studentId);
 
         await tx.complaint.updateMany({
           where: {

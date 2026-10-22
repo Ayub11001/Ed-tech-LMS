@@ -9,6 +9,7 @@ import {
   Query,
   UseGuards,
 } from '@nestjs/common';
+import { ApiOperation, ApiParam, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { EnrollmentService } from './enrollment.service';
 import { JwtAuthGuard } from 'src/common/guards/jwt-auth.guard';
 import { RolesGuard } from 'src/common/guards/roles.guard';
@@ -18,7 +19,11 @@ import { Roles } from 'src/common/decorators/role.decorator';
 import { Role } from '@prisma/client';
 import { PaginatedResponseDto } from 'src/common/dto/paginated_response.dto';
 import { PaginatedSearchQueryDto } from 'src/common/dto/paginated_search_query.dto';
+import { ApiAuth } from 'src/common/swagger/decorators/api-auth.decorator';
+import { ApiErrorResponses } from 'src/common/swagger/decorators/api-error-responses.decorator';
+import { ApiPaginatedResponse } from 'src/common/swagger/decorators/api-paginated-response.decorator';
 
+@ApiTags('enrollments')
 @UseGuards(JwtAuthGuard, RolesGuard)
 @Controller('enrollment')
 export class EnrollmentController {
@@ -28,6 +33,23 @@ export class EnrollmentController {
   @Post(':courseId')
   @Roles(Role.STUDENT)
   @HttpCode(HttpStatus.CREATED)
+  @ApiAuth()
+  @ApiOperation({
+    summary: 'Enroll in a course (student only)',
+    description:
+      'Enrolls the authenticated student in the specified course if seats are available.',
+  })
+  @ApiParam({ name: 'courseId', type: String, format: 'uuid' })
+  @ApiResponse({
+    status: 201,
+    description: 'Enrolled successfully',
+    type: EnrollmentResponseDto,
+  })
+  @ApiErrorResponses({
+    400: 'Course capacity full',
+    404: 'Invalid courseId',
+    409: 'Already enrolled in this course',
+  })
   async enroll(
     @GetUser('id') studentId: string,
     @Param('courseId') courseId: string,
@@ -37,6 +59,19 @@ export class EnrollmentController {
 
   @Get('')
   @Roles(Role.STUDENT)
+  @ApiAuth()
+  @ApiOperation({
+    summary: 'Get current student enrollments',
+    description:
+      'Returns all active enrollments for the authenticated student.',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'List of enrollments',
+    type: EnrollmentResponseDto,
+    isArray: true,
+  })
+  @ApiErrorResponses()
   async getMyEnrollments(
     @GetUser('id') id: string,
   ): Promise<EnrollmentResponseDto[]> {
@@ -46,6 +81,14 @@ export class EnrollmentController {
   @Delete('dropout/:courseId')
   @Roles(Role.STUDENT)
   @HttpCode(HttpStatus.NO_CONTENT)
+  @ApiAuth()
+  @ApiOperation({
+    summary: 'Drop out of a course (student only)',
+    description: 'Soft deletes the enrollment and releases the seat.',
+  })
+  @ApiParam({ name: 'courseId', type: String, format: 'uuid' })
+  @ApiResponse({ status: 204, description: 'Dropped out successfully' })
+  @ApiErrorResponses()
   async dropout(
     @Param('courseId') courseId: string,
     @GetUser('id') studentId: string,
@@ -57,6 +100,15 @@ export class EnrollmentController {
 
   @Get('course/:courseId')
   @Roles(Role.EDUCATOR)
+  @ApiAuth()
+  @ApiOperation({
+    summary: 'Get enrollments for a course (educator only)',
+    description:
+      'Returns a paginated list of active students enrolled in the course.',
+  })
+  @ApiParam({ name: 'courseId', type: String, format: 'uuid' })
+  @ApiPaginatedResponse(EnrollmentResponseDto)
+  @ApiErrorResponses()
   async getCourseEnrollments(
     @Param('courseId') id: string,
     @Query() dto: PaginatedSearchQueryDto,
@@ -68,6 +120,13 @@ export class EnrollmentController {
 
   @Get('enrollments/admin')
   @Roles(Role.ADMIN)
+  @ApiAuth()
+  @ApiOperation({
+    summary: 'List all enrollments (admin only)',
+    description: 'Returns a paginated list of all active enrollments.',
+  })
+  @ApiPaginatedResponse(EnrollmentResponseDto)
+  @ApiErrorResponses()
   async getAll(
     @Query() dto: PaginatedSearchQueryDto,
   ): Promise<PaginatedResponseDto<EnrollmentResponseDto>> {
@@ -77,12 +136,42 @@ export class EnrollmentController {
   @Delete(':id')
   @Roles(Role.ADMIN)
   @HttpCode(HttpStatus.NO_CONTENT)
+  @ApiAuth()
+  @ApiOperation({
+    summary: 'Remove an enrollment (admin only)',
+    description: 'Soft deletes the enrollment and releases the seat.',
+  })
+  @ApiParam({
+    name: 'id',
+    type: String,
+    format: 'uuid',
+    description: 'Enrollment ID',
+  })
+  @ApiResponse({ status: 204, description: 'Enrollment removed successfully' })
+  @ApiErrorResponses()
   async removeAdmin(@Param('id') id: string) {
     await this.enrollmentService.removeById(id);
   }
 
   @Get(':id')
   @Roles(Role.ADMIN)
+  @ApiAuth()
+  @ApiOperation({
+    summary: 'Get enrollment by ID (admin only)',
+    description: 'Returns details for a specific enrollment.',
+  })
+  @ApiParam({
+    name: 'id',
+    type: String,
+    format: 'uuid',
+    description: 'Enrollment ID',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Enrollment details',
+    type: EnrollmentResponseDto,
+  })
+  @ApiErrorResponses()
   async getById(@Param('id') id: string): Promise<EnrollmentResponseDto> {
     return await this.enrollmentService.getById(id);
   }

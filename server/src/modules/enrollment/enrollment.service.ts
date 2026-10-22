@@ -19,7 +19,7 @@ export class EnrollmentService {
     courseId: string;
   }): Promise<EnrollmentResponseDto> {
     const course = await this.prisma.course.findUnique({
-      where: { id: courseId },
+      where: { id: courseId, removedAt: null },
     });
     if (!course) {
       throw new DomainException(
@@ -149,6 +149,17 @@ export class EnrollmentService {
     dto: PaginatedSearchQueryDto,
   ): Promise<PaginatedResponseDto<EnrollmentResponseDto>> {
     const { page, limit } = dto;
+
+    const course = await this.prisma.course.findUnique({
+      where: { id: courseId, removedAt: null },
+    });
+    if (!course) {
+      throw new DomainException(
+        ErrorCodes.RESOURCE_NOT_FOUND,
+        HttpStatus.NOT_FOUND,
+        'Course with id not found',
+      );
+    }
 
     const [enrollments, total] = await this.prisma.$transaction([
       this.prisma.enrollment.findMany({

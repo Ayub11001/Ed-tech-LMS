@@ -2,11 +2,12 @@ import { HttpStatus, Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { UserResponseDto } from './dto/user-response.dto';
 import { UsersQueryDto } from './dto/users-query.dto';
-import { Prisma, ComplaintStatus } from '@prisma/client';
+import { Prisma, ComplaintStatus, Role } from '@prisma/client';
 import { UpdateUserDto } from './dto/update-user.dto';
 import { PaginatedResponseDto } from 'src/common/dto/paginated_response.dto';
 import { DomainException } from '../../common/errors/domain.exceptions';
 import { ErrorCodes } from '../../common/errors/error-codes';
+import { releaseSeats } from 'src/common/helpers/release-seats';
 
 @Injectable()
 export class UserService {
@@ -114,28 +115,52 @@ export class UserService {
   }
 
   async remove(userId: string): Promise<void> {
-    await this.prisma.$transaction([
-      this.prisma.enrollment.updateMany({
-        where: { studentId: userId },
-        data: { removedAt: new Date() },
-      }),
-      this.prisma.attendance.updateMany({
-        where: { studentId: userId },
-        data: { removedAt: new Date() },
-      }),
-      this.prisma.complaint.updateMany({
+    await this.prisma.$transaction(async (tx) => {
+      const user = await tx.user.findUnique({
+        where: { id: userId },
+        select: { id: true, removedAt: true, role: true },
+      });
+
+      if (!user) {
+        throw new DomainException(
+          ErrorCodes.RESOURCE_NOT_FOUND,
+          HttpStatus.NOT_FOUND,
+          'User not found',
+        );
+      }
+      if (user.removedAt) return;
+
+      if (user.role === Role.EDUCATOR) {
+        const ownedCourses = await tx.course.count({
+          where: {
+            educatorId: user.id,
+            removedAt: null,
+          },
+        });
+        if (ownedCourses > 0) {
+          throw new DomainException(
+            ErrorCodes.RELATED_RESOURCE_EXISTS,
+            HttpStatus.CONFLICT,
+            `User still owns ${ownedCourses} course(s). Reassign or delete them first.`,
+          );
+        }
+      }
+
+      await releaseSeats(tx, userId);
+
+      await tx.complaint.updateMany({
         where: {
           studentId: userId,
-          status: {
-            in: [ComplaintStatus.PENDING, ComplaintStatus.PROCESSING],
-          },
+          removedAt: null,
+          status: { in: [ComplaintStatus.PENDING, ComplaintStatus.PROCESSING] },
         },
         data: { removedAt: new Date() },
-      }),
-      this.prisma.user.update({
+      });
+
+      await tx.user.update({
         where: { id: userId },
         data: { removedAt: new Date() },
-      }),
-    ]);
+      });
+    });
   }
 }

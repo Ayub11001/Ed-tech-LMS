@@ -11,16 +11,7 @@ import { Request, Response } from 'express';
 import { DomainException } from './domain.exceptions';
 import { ErrorCode, ErrorCodes } from './error-codes';
 import { mapPrismaError } from './prisma-error.mapper';
-
-type Envelope = {
-  statusCode: number;
-  error: ErrorCode;
-  message: string;
-  details?: unknown[];
-  timestamp: string;
-  path: string;
-  requestId: string;
-};
+import { ErrorEnvelopeDto } from './error-envelope.dto';
 
 const STATUS_TO_CODE: Record<number, ErrorCode> = {
   [HttpStatus.BAD_REQUEST]: ErrorCodes.BAD_REQUEST,
@@ -49,7 +40,7 @@ export class AllExceptionsFilter implements ExceptionFilter {
     );
     const requestId = req.id || 'unknown';
 
-    const envelope: Envelope = {
+    const envelope: ErrorEnvelopeDto = {
       statusCode,
       error: code,
       message,

@@ -51,7 +51,7 @@ export class AttendanceService {
     const { page, limit } = dto;
 
     const existingCourse = await this.prisma.course.findUnique({
-      where: { id: courseId },
+      where: { id: courseId, removedAt: null },
     });
     if (!existingCourse) {
       throw new DomainException(
