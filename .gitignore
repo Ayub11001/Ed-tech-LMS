@@ -1,0 +1,20 @@
+# Tooling
+.opencode/
+
+# OS
+.DS_Store
+
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+build/
+coverage/
+
+# Logs
+*.log
+
+# Environment
+.env
+.env.*.local

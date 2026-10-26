@@ -1,27 +1,64 @@
-import { Role } from "@prisma/client";
-import { Transform, Type } from "class-transformer";
-import { IsBoolean, IsEnum, IsInt, IsOptional, Max, Min } from "class-validator";
+import { ApiPropertyOptional } from '@nestjs/swagger';
+import { Role } from '@prisma/client';
+import { Transform, Type } from 'class-transformer';
+import {
+  IsBoolean,
+  IsEnum,
+  IsInt,
+  IsOptional,
+  Max,
+  Min,
+} from 'class-validator';
+import type { TransformFnParams } from 'class-transformer';
 
 export class UsersQueryDto {
-    @IsOptional()
-    @IsEnum(Role)
-    role?: Role;
+  @ApiPropertyOptional({
+    enum: Role,
+    enumName: 'Role',
+    example: Role.STUDENT,
+    description: 'Filter users by role',
+  })
+  @IsOptional()
+  @IsEnum(Role)
+  role?: Role;
 
-    @IsOptional()
-    @IsBoolean()
-    @Transform(({ value }) => value === 'true')
-    isWarned?: boolean;
+  @ApiPropertyOptional({
+    example: true,
+    description: 'Filter users by warning status',
+  })
+  @IsOptional()
+  @IsBoolean()
+  @Transform(({ obj }: TransformFnParams): unknown => {
+    const raw = (obj as Record<string, unknown>).isWarned;
+    if (raw === true || raw === 'true') return true;
+    if (raw === false || raw === 'false') return false;
+    return raw;
+  })
+  isWarned?: boolean;
 
-    @IsOptional()
-    @IsInt()
-    @Min(1)
-    @Type(() => Number)
-    page?: number = 1;
+  @ApiPropertyOptional({
+    example: 1,
+    minimum: 1,
+    default: 1,
+    description: 'Page number to return (1-based)',
+  })
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  @Type(() => Number)
+  page?: number = 1;
 
-    @IsOptional()
-    @IsInt()
-    @Min(1)
-    @Max(50)
-    @Type(() => Number)
-    limit?: number = 10;
+  @ApiPropertyOptional({
+    example: 10,
+    minimum: 1,
+    maximum: 50,
+    default: 10,
+    description: 'Maximum number of items returned per page',
+  })
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  @Max(50)
+  @Type(() => Number)
+  limit?: number = 10;
 }

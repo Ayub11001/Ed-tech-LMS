@@ -3,28 +3,27 @@ import { PrismaPg } from '@prisma/adapter-pg';
 import { PrismaClient } from '@prisma/client';
 
 @Injectable()
-export class PrismaService 
-extends PrismaClient
-implements OnModuleInit, OnModuleDestroy {
+export class PrismaService
+  extends PrismaClient
+  implements OnModuleInit, OnModuleDestroy
+{
+  constructor() {
+    const adapter = new PrismaPg({
+      connectionString: process.env.DATABASE_URL,
+    });
 
-    constructor() {
-        const adapter = new PrismaPg({
-            connectionString: process.env.DATABASE_URL
-        });
+    super({
+      adapter,
+    });
+  }
 
-        super({
-            adapter,
-        });
-    }
+  async onModuleInit() {
+    await this.$connect();
+    console.log('DB connected successfully');
+  }
 
-    async onModuleInit() {
-        await this.$connect();
-        console.log("DB connected successfully");
-    }
-
-    async onModuleDestroy() {
-        await this.$disconnect();
-        console.log("Database disconnected");
-    }
-
+  async onModuleDestroy() {
+    await this.$disconnect();
+    console.log('Database disconnected');
+  }
 }
