@@ -3,10 +3,11 @@ import { PrismaService } from '../prisma/prisma.service';
 import { EnrollmentResponseDto } from './dto/enrollment_response.dto';
 import { PaginatedResponseDto } from 'src/common/dto/paginated_response.dto';
 import { PaginatedSearchQueryDto } from 'src/common/dto/paginated_search_query.dto';
-import { Prisma } from '@prisma/client';
+import { Prisma, Role } from '@prisma/client';
 import { DomainException } from '../../common/errors/domain.exceptions';
 import { ErrorCodes } from '../../common/errors/error-codes';
-import { TX_OPTIONS, lockCourse } from 'src/common/helpers/locks';
+import { TX_OPTIONS, lockCourse, lockUser } from 'src/common/helpers/locks';
+import { releaseSeat } from 'src/common/helpers/release-seats';
 
 @Injectable()
 export class EnrollmentService {
@@ -20,6 +21,26 @@ export class EnrollmentService {
     courseId: string;
   }): Promise<EnrollmentResponseDto> {
     return await this.prisma.$transaction(async (tx) => {
+      if (!(await lockUser(tx, studentId))) {
+        throw new DomainException(
+          ErrorCodes.RESOURCE_NOT_FOUND,
+          HttpStatus.NOT_FOUND,
+          'Student not found',
+        );
+      }
+
+      const student = await tx.user.findUnique({
+        where: { id: studentId, removedAt: null, role: Role.STUDENT },
+        select: { id: true },
+      });
+      if (!student) {
+        throw new DomainException(
+          ErrorCodes.RESOURCE_NOT_FOUND,
+          HttpStatus.NOT_FOUND,
+          'Student not found',
+        );
+      }
+
       if (!(await lockCourse(tx, courseId))) {
         throw new DomainException(
           ErrorCodes.RESOURCE_NOT_FOUND,
@@ -290,38 +311,12 @@ export class EnrollmentService {
         );
       }
 
-      await lockCourse(tx, found.courseId);
-
-      const now = new Date();
-      const enrollment = await tx.enrollment.update({
-        where: { id, removedAt: null },
-        data: { removedAt: now },
-        select: { studentId: true, courseId: true },
-      });
-
-      await tx.attendance.updateMany({
-        where: {
-          studentId: enrollment.studentId,
-          courseId: enrollment.courseId,
-          removedAt: null,
-        },
-        data: { removedAt: now },
-      });
-
-      const remove = await tx.course.updateMany({
-        where: {
-          id: enrollment.courseId,
-          enrollmentCount: { gt: 0 },
-        },
-        data: {
-          enrollmentCount: { decrement: 1 },
-        },
-      });
-      if (remove.count === 0) {
+      const released = await releaseSeat(tx, found.studentId, found.courseId);
+      if (released === 0) {
         throw new DomainException(
-          ErrorCodes.INTERNAL_ERROR,
-          HttpStatus.INTERNAL_SERVER_ERROR,
-          'Stored course enrollment counts are inconsistent',
+          ErrorCodes.RESOURCE_NOT_FOUND,
+          HttpStatus.NOT_FOUND,
+          'Enrollment not found',
         );
       }
     }, TX_OPTIONS);
@@ -335,36 +330,12 @@ export class EnrollmentService {
     courseId: string;
   }) {
     await this.prisma.$transaction(async (tx) => {
-      await lockCourse(tx, courseId);
-
-      const now = new Date();
-      const enrollment = await tx.enrollment.update({
-        where: {
-          studentId_courseId: { studentId, courseId },
-          removedAt: null,
-        },
-        data: { removedAt: now },
-      });
-
-      await tx.attendance.updateMany({
-        where: { studentId, courseId, removedAt: null },
-        data: { removedAt: now },
-      });
-
-      const remove = await tx.course.updateMany({
-        where: {
-          id: enrollment.courseId,
-          enrollmentCount: { gt: 0 },
-        },
-        data: {
-          enrollmentCount: { decrement: 1 },
-        },
-      });
-      if (remove.count === 0) {
+      const released = await releaseSeat(tx, studentId, courseId);
+      if (released === 0) {
         throw new DomainException(
-          ErrorCodes.INTERNAL_ERROR,
-          HttpStatus.INTERNAL_SERVER_ERROR,
-          'Stored course enrollment counts are inconsistent',
+          ErrorCodes.RESOURCE_NOT_FOUND,
+          HttpStatus.NOT_FOUND,
+          'Enrollment not found',
         );
       }
     }, TX_OPTIONS);

@@ -9,6 +9,7 @@ import { ResolveComplaintDto } from './dto/resolve_complaint.dto';
 import { DomainException } from '../../common/errors/domain.exceptions';
 import { ErrorCodes } from '../../common/errors/error-codes';
 import { releaseSeats } from 'src/common/helpers/release-seats';
+import { lockUser } from 'src/common/helpers/locks';
 
 @Injectable()
 export class ComplaintsService {
@@ -153,7 +154,8 @@ export class ComplaintsService {
     id: string,
     dto: ResolveComplaintDto,
   ): Promise<ComplaintResponseDto> {
-    const { resolution, deduction } = dto;
+    const { resolution } = dto;
+    const deduction = dto.deduction ?? 1;
 
     const updatedComplaint = await this.prisma.$transaction(async (tx) => {
       const existingComplaint = await tx.complaint.findUnique({
@@ -174,6 +176,32 @@ export class ComplaintsService {
         );
       }
       const studentId = existingComplaint.studentId;
+
+      if (!(await lockUser(tx, studentId))) {
+        throw new DomainException(
+          ErrorCodes.RESOURCE_NOT_FOUND,
+          HttpStatus.NOT_FOUND,
+          'Student not found',
+        );
+      }
+
+      const activeComplaint = await tx.complaint.findUnique({
+        where: {
+          id,
+          removedAt: null,
+          status: {
+            in: [ComplaintStatus.PROCESSING, ComplaintStatus.PENDING],
+          },
+        },
+        select: { id: true },
+      });
+      if (!activeComplaint) {
+        throw new DomainException(
+          ErrorCodes.CONFLICT,
+          HttpStatus.CONFLICT,
+          'Complaint is no longer active',
+        );
+      }
 
       if (resolution === 'REMOVED') {
         await releaseSeats(tx, studentId);
@@ -196,7 +224,20 @@ export class ComplaintsService {
         });
       } else {
         await tx.attendance.updateMany({
-          where: { studentId: existingComplaint.studentId, removedAt: null },
+          where: {
+            studentId,
+            removedAt: null,
+            watchedLectures: { lt: deduction },
+          },
+          data: { watchedLectures: 0 },
+        });
+
+        await tx.attendance.updateMany({
+          where: {
+            studentId,
+            removedAt: null,
+            watchedLectures: { gte: deduction },
+          },
           data: { watchedLectures: { decrement: deduction } },
         });
 

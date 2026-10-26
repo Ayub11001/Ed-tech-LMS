@@ -25,7 +25,10 @@ async function release(
   if (courseId !== undefined) {
     await lockCourse(tx, courseId);
   } else {
-    await lockCourses(tx, enrollments.map((enrollment) => enrollment.courseId));
+    await lockCourses(
+      tx,
+      enrollments.map((enrollment) => enrollment.courseId),
+    );
   }
 
   const expected = await tx.enrollment.count({ where: scope });
