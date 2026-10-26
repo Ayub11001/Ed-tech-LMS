@@ -21,7 +21,7 @@ export class JwtRefreshStrategy extends PassportStrategy(
           const cookies = req.cookies as
             | Record<string, string | undefined>
             | undefined;
-          return cookies?.accessToken ?? null;
+          return cookies?.refreshToken ?? null;
         },
         ExtractJwt.fromAuthHeaderAsBearerToken(),
       ]),

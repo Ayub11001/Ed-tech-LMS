@@ -9,6 +9,7 @@ import {
   Max,
   Min,
 } from 'class-validator';
+import type { TransformFnParams } from 'class-transformer';
 
 export class UsersQueryDto {
   @ApiPropertyOptional({
@@ -27,7 +28,12 @@ export class UsersQueryDto {
   })
   @IsOptional()
   @IsBoolean()
-  @Transform(({ value }) => value === 'true')
+  @Transform(({ obj }: TransformFnParams): unknown => {
+    const raw = (obj as Record<string, unknown>).isWarned;
+    if (raw === true || raw === 'true') return true;
+    if (raw === false || raw === 'false') return false;
+    return raw;
+  })
   isWarned?: boolean;
 
   @ApiPropertyOptional({

@@ -8,10 +8,13 @@ import { PaginatedResponseDto } from 'src/common/dto/paginated_response.dto';
 import { DomainException } from '../../common/errors/domain.exceptions';
 import { ErrorCodes } from '../../common/errors/error-codes';
 import { releaseSeats } from 'src/common/helpers/release-seats';
+import bcrypt from 'bcrypt';
 
 @Injectable()
 export class UserService {
   constructor(private readonly prisma: PrismaService) {}
+
+  private readonly SALT_ROUNDS = 12;
 
   async getDetails(userId: string): Promise<UserResponseDto> {
     const user = await this.prisma.user.findUnique({
@@ -50,7 +53,7 @@ export class UserService {
         where,
         skip: (page - 1) * limit,
         take: limit,
-        orderBy: { createdAt: 'desc' },
+        orderBy: [{ createdAt: 'desc' }, { id: 'asc' }],
         select: {
           id: true,
           email: true,
@@ -87,21 +90,38 @@ export class UserService {
       );
     }
 
-    if (updateDto.email && updateDto.email !== existingUser.email) {
-      const emailTaken = await this.prisma.user.findUnique({
-        where: { email: updateDto.email },
+    const data: Prisma.UserUpdateInput = {};
+
+    if (updateDto.email !== undefined) {
+      const emailTaken = await this.prisma.user.findFirst({
+        where: {
+          email: updateDto.email,
+          removedAt: null,
+          NOT: { id: userId },
+        },
       });
-      if (emailTaken)
+      if (emailTaken) {
         throw new DomainException(
           ErrorCodes.EMAIL_TAKEN,
           HttpStatus.CONFLICT,
           'User with this email already exists',
         );
+      }
+      data.email = updateDto.email;
+    }
+
+    if (updateDto.fullName !== undefined) {
+      data.fullName = updateDto.fullName;
+    }
+
+    if (updateDto.password !== undefined) {
+      data.password = await bcrypt.hash(updateDto.password, this.SALT_ROUNDS);
+      data.refreshToken = null;
     }
 
     const updatedUser = await this.prisma.user.update({
       where: { id: userId },
-      data: updateDto,
+      data,
       select: {
         id: true,
         email: true,

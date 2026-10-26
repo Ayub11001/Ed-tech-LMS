@@ -9,6 +9,7 @@ export class ComplaintSearchQueryDto extends PaginatedSearchQueryDto {
   })
   @IsOptional()
   @IsString()
+  @MaxLength(100)
   studentName: string;
 
   @ApiPropertyOptional({
@@ -17,6 +18,7 @@ export class ComplaintSearchQueryDto extends PaginatedSearchQueryDto {
   })
   @IsOptional()
   @IsString()
+  @MaxLength(100)
   educatorName: string;
 
   @ApiPropertyOptional({
@@ -26,6 +28,6 @@ export class ComplaintSearchQueryDto extends PaginatedSearchQueryDto {
   })
   @IsOptional()
   @IsString()
-  @MaxLength(75)
+  @MaxLength(150)
   reason: string;
 }

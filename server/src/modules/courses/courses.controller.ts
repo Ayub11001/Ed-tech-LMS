@@ -5,7 +5,6 @@ import {
   Get,
   HttpCode,
   HttpStatus,
-  Param,
   Patch,
   Post,
   Query,
@@ -21,6 +20,7 @@ import { RolesGuard } from 'src/common/guards/roles.guard';
 import { CourseResponseDto } from './dtos/course_response.dto';
 import { UpdateCourseDto } from './dtos/update_course.dto';
 import { GetUser } from 'src/common/decorators/get-user.decorator';
+import { UuidParam } from 'src/common/dto/uuid-param.decorator';
 import { StudentResponseDto } from './dtos/student_response.dto';
 import { PaginatedResponseDto } from 'src/common/dto/paginated_response.dto';
 import { PaginatedSearchQueryDto } from 'src/common/dto/paginated_search_query.dto';
@@ -53,7 +53,7 @@ export class CoursesController {
   @ApiPaginatedResponse(StudentResponseDto)
   @ApiErrorResponses()
   async getStudents(
-    @Param('id') id: string,
+    @UuidParam('id') id: string,
     @Query() dto: PaginatedSearchQueryDto,
   ): Promise<PaginatedResponseDto<StudentResponseDto>> {
     return await this.courseService.getStudents(id, dto);
@@ -100,7 +100,7 @@ export class CoursesController {
   })
   @ApiErrorResponses()
   async getEducatorCoursesAdmin(
-    @Param('id') id: string,
+    @UuidParam('id') id: string,
   ): Promise<CourseResponseDto[]> {
     return await this.courseService.getByEducatorId(id);
   }
@@ -125,7 +125,7 @@ export class CoursesController {
     type: CourseResponseDto,
   })
   @ApiErrorResponses({ 404: 'Course or educator not found' })
-  async update(@Param('id') id: string, @Body() dto: UpdateCourseDto) {
+  async update(@UuidParam('id') id: string, @Body() dto: UpdateCourseDto) {
     return await this.courseService.update(dto, id);
   }
 
@@ -146,7 +146,7 @@ export class CoursesController {
   })
   @ApiResponse({ status: 204, description: 'Course deleted successfully' })
   @ApiErrorResponses({ 409: 'Students are already enrolled' })
-  async delete(@Param('id') id: string): Promise<void> {
+  async delete(@UuidParam('id') id: string): Promise<void> {
     return await this.courseService.delete(id);
   }
 
@@ -211,7 +211,7 @@ export class CoursesController {
     type: CourseResponseDto,
   })
   @ApiErrorResponses()
-  async getCourseById(@Param('id') id: string): Promise<CourseResponseDto> {
+  async getCourseById(@UuidParam('id') id: string): Promise<CourseResponseDto> {
     return await this.courseService.getOne(id);
   }
 }

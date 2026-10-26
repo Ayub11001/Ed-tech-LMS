@@ -5,7 +5,6 @@ import {
   Get,
   HttpCode,
   HttpStatus,
-  Param,
   Patch,
   Query,
   UseGuards,
@@ -17,6 +16,7 @@ import { RolesGuard } from 'src/common/guards/roles.guard';
 import { Roles } from 'src/common/decorators/role.decorator';
 import { Role } from '@prisma/client';
 import { GetUser } from 'src/common/decorators/get-user.decorator';
+import { UuidParam } from 'src/common/dto/uuid-param.decorator';
 import { UserResponseDto } from './dto/user-response.dto';
 import { UsersQueryDto } from './dto/users-query.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
@@ -118,7 +118,9 @@ export class UserController {
     type: UserResponseDto,
   })
   @ApiErrorResponses()
-  async getDetailsById(@Param('id') userId: string): Promise<UserResponseDto> {
+  async getDetailsById(
+    @UuidParam('id') userId: string,
+  ): Promise<UserResponseDto> {
     return await this.userService.getDetails(userId);
   }
 
@@ -138,7 +140,7 @@ export class UserController {
   })
   @ApiErrorResponses({ 409: 'Email already taken' })
   async updateUser(
-    @Param('id') userId: string,
+    @UuidParam('id') userId: string,
     @Body() updateDto: UpdateUserDto,
   ): Promise<UserResponseDto> {
     return await this.userService.update(userId, updateDto);
@@ -156,7 +158,7 @@ export class UserController {
   @ApiParam({ name: 'id', type: String, format: 'uuid' })
   @ApiResponse({ status: 204, description: 'User deleted successfully' })
   @ApiErrorResponses()
-  async removeUser(@Param('id') userId: string): Promise<void> {
+  async removeUser(@UuidParam('id') userId: string): Promise<void> {
     await this.userService.remove(userId);
   }
 }

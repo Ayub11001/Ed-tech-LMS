@@ -64,6 +64,7 @@ export class AttendanceService {
     const [attendances, total] = await this.prisma.$transaction([
       this.prisma.attendance.findMany({
         where: { courseId, removedAt: null },
+        orderBy: [{ createdAt: 'desc' }, { id: 'asc' }],
         skip: (page - 1) * limit,
         take: limit,
         include: {
@@ -102,6 +103,7 @@ export class AttendanceService {
     const [attendances, total] = await this.prisma.$transaction([
       this.prisma.attendance.findMany({
         where,
+        orderBy: [{ createdAt: 'desc' }, { id: 'asc' }],
         skip: (page - 1) * limit,
         take: limit,
         include: {

@@ -4,7 +4,6 @@ import {
   Get,
   HttpCode,
   HttpStatus,
-  Param,
   Patch,
   Post,
   Query,
@@ -16,6 +15,7 @@ import { JwtAuthGuard } from 'src/common/guards/jwt-auth.guard';
 import { RolesGuard } from 'src/common/guards/roles.guard';
 import { RegisterComplaintDto } from './dto/register_complaint.dto';
 import { GetUser } from 'src/common/decorators/get-user.decorator';
+import { UuidParam } from 'src/common/dto/uuid-param.decorator';
 import { Roles } from 'src/common/decorators/role.decorator';
 import { Role } from '@prisma/client';
 import { ComplaintResponseDto } from './dto/complaint_response.dto';
@@ -86,7 +86,7 @@ export class ComplaintsController {
   })
   @ApiErrorResponses()
   async getOneComplaint(
-    @Param('complaintId') id: string,
+    @UuidParam('complaintId') id: string,
   ): Promise<ComplaintResponseDto> {
     return await this.complaintsService.getById(id);
   }
@@ -106,7 +106,7 @@ export class ComplaintsController {
   })
   @ApiErrorResponses()
   async processComplaint(
-    @Param('id') id: string,
+    @UuidParam('id') id: string,
   ): Promise<ComplaintResponseDto> {
     return await this.complaintsService.process(id);
   }
@@ -128,7 +128,7 @@ export class ComplaintsController {
   @ApiErrorResponses({ 409: 'Complaint already resolved' })
   async resolveComplaint(
     @Body() dto: ResolveComplaintDto,
-    @Param('id') id: string,
+    @UuidParam('id') id: string,
   ): Promise<ComplaintResponseDto> {
     return await this.complaintsService.resolve(id, dto);
   }
@@ -179,7 +179,7 @@ export class ComplaintsController {
   })
   async create(
     @Body() dto: RegisterComplaintDto,
-    @Param('studentId') studentId: string,
+    @UuidParam('studentId') studentId: string,
     @GetUser('id') educatorId: string,
   ): Promise<ComplaintResponseDto> {
     return await this.complaintsService.create(dto, studentId, educatorId);

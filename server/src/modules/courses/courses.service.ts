@@ -142,6 +142,7 @@ export class CoursesService {
     const [courses, total] = await this.prisma.$transaction([
       this.prisma.course.findMany({
         where,
+        orderBy: [{ createdAt: 'desc' }, { id: 'asc' }],
         skip: (page - 1) * limit,
         take: limit,
         include: {
@@ -171,6 +172,7 @@ export class CoursesService {
 
     const courses = await this.prisma.course.findMany({
       where: { educatorId, removedAt: null },
+      orderBy: [{ createdAt: 'desc' }, { id: 'asc' }],
       include: {
         educator: {
           select: { fullName: true, email: true },
@@ -219,6 +221,7 @@ export class CoursesService {
     const [students, total] = await this.prisma.$transaction([
       this.prisma.enrollment.findMany({
         where: { courseId, removedAt: null },
+        orderBy: [{ createdAt: 'desc' }, { id: 'asc' }],
         select: {
           student: {
             select: { id: true, fullName: true, email: true },

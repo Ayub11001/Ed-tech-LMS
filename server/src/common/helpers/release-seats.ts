@@ -2,28 +2,37 @@ import { HttpStatus } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { DomainException } from '../errors/domain.exceptions';
 import { ErrorCodes } from '../errors/error-codes';
+import { lockCourse, lockCourses } from './locks';
 
-export async function releaseSeats(
+async function release(
   tx: Prisma.TransactionClient,
   studentId: string,
-): Promise<void> {
+  courseId?: string,
+): Promise<number> {
   const now = new Date();
+  const scope = {
+    studentId,
+    removedAt: null,
+    ...(courseId !== undefined ? { courseId } : {}),
+  };
 
-  // Seats currently held by this student. One per course, guaranteed by
-  // @@unique([studentId, courseId]) on Enrollment. Used for the strict check.
-  const expected = await tx.enrollment.count({
-    where: {
-      studentId,
-      removedAt: null,
-    },
+  const enrollments = await tx.enrollment.findMany({
+    where: scope,
+    select: { courseId: true },
+    orderBy: { courseId: 'asc' },
   });
 
-  // Release every seat in one set-based statement. The relation filter is
-  // evaluated by the database and the decrement is atomic at the row level.
+  if (courseId !== undefined) {
+    await lockCourse(tx, courseId);
+  } else {
+    await lockCourses(tx, enrollments.map((enrollment) => enrollment.courseId));
+  }
+
+  const expected = await tx.enrollment.count({ where: scope });
   const released = await tx.course.updateMany({
     where: {
       enrollmentCount: { gt: 0 },
-      enrollments: { some: { studentId, removedAt: null } },
+      enrollments: { some: scope },
     },
     data: {
       enrollmentCount: { decrement: 1 },
@@ -32,29 +41,40 @@ export async function releaseSeats(
 
   if (released.count !== expected) {
     throw new DomainException(
-      ErrorCodes.CONFLICT,
-      HttpStatus.CONFLICT,
+      ErrorCodes.INTERNAL_ERROR,
+      HttpStatus.INTERNAL_SERVER_ERROR,
       'Stored course enrollment counts are inconsistent',
     );
   }
 
   await tx.enrollment.updateMany({
-    where: {
-      studentId,
-      removedAt: null,
-    },
+    where: scope,
     data: {
       removedAt: now,
     },
   });
 
   await tx.attendance.updateMany({
-    where: {
-      studentId,
-      removedAt: null,
-    },
+    where: scope,
     data: {
       removedAt: now,
     },
   });
+
+  return expected;
+}
+
+export async function releaseSeat(
+  tx: Prisma.TransactionClient,
+  studentId: string,
+  courseId: string,
+): Promise<number> {
+  return release(tx, studentId, courseId);
+}
+
+export async function releaseSeats(
+  tx: Prisma.TransactionClient,
+  studentId: string,
+): Promise<number> {
+  return release(tx, studentId);
 }

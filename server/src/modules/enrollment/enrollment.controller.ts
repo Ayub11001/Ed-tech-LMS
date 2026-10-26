@@ -4,7 +4,6 @@ import {
   Get,
   HttpCode,
   HttpStatus,
-  Param,
   Post,
   Query,
   UseGuards,
@@ -14,6 +13,7 @@ import { EnrollmentService } from './enrollment.service';
 import { JwtAuthGuard } from 'src/common/guards/jwt-auth.guard';
 import { RolesGuard } from 'src/common/guards/roles.guard';
 import { GetUser } from 'src/common/decorators/get-user.decorator';
+import { UuidParam } from 'src/common/dto/uuid-param.decorator';
 import { EnrollmentResponseDto } from './dto/enrollment_response.dto';
 import { Roles } from 'src/common/decorators/role.decorator';
 import { Role } from '@prisma/client';
@@ -46,13 +46,13 @@ export class EnrollmentController {
     type: EnrollmentResponseDto,
   })
   @ApiErrorResponses({
-    400: 'Course capacity full',
     404: 'Invalid courseId',
     409: 'Already enrolled in this course',
+    422: 'Course capacity full',
   })
   async enroll(
     @GetUser('id') studentId: string,
-    @Param('courseId') courseId: string,
+    @UuidParam('courseId') courseId: string,
   ): Promise<EnrollmentResponseDto> {
     return await this.enrollmentService.create({ studentId, courseId });
   }
@@ -90,7 +90,7 @@ export class EnrollmentController {
   @ApiResponse({ status: 204, description: 'Dropped out successfully' })
   @ApiErrorResponses()
   async dropout(
-    @Param('courseId') courseId: string,
+    @UuidParam('courseId') courseId: string,
     @GetUser('id') studentId: string,
   ) {
     await this.enrollmentService.removeByStudent({ studentId, courseId });
@@ -110,7 +110,7 @@ export class EnrollmentController {
   @ApiPaginatedResponse(EnrollmentResponseDto)
   @ApiErrorResponses()
   async getCourseEnrollments(
-    @Param('courseId') id: string,
+    @UuidParam('courseId') id: string,
     @Query() dto: PaginatedSearchQueryDto,
   ): Promise<PaginatedResponseDto<EnrollmentResponseDto>> {
     return await this.enrollmentService.getByCourse(id, dto);
@@ -149,7 +149,7 @@ export class EnrollmentController {
   })
   @ApiResponse({ status: 204, description: 'Enrollment removed successfully' })
   @ApiErrorResponses()
-  async removeAdmin(@Param('id') id: string) {
+  async removeAdmin(@UuidParam('id') id: string) {
     await this.enrollmentService.removeById(id);
   }
 
@@ -172,7 +172,7 @@ export class EnrollmentController {
     type: EnrollmentResponseDto,
   })
   @ApiErrorResponses()
-  async getById(@Param('id') id: string): Promise<EnrollmentResponseDto> {
+  async getById(@UuidParam('id') id: string): Promise<EnrollmentResponseDto> {
     return await this.enrollmentService.getById(id);
   }
 }

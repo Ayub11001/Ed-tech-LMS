@@ -6,6 +6,7 @@ import { PaginatedSearchQueryDto } from 'src/common/dto/paginated_search_query.d
 import { Prisma } from '@prisma/client';
 import { DomainException } from '../../common/errors/domain.exceptions';
 import { ErrorCodes } from '../../common/errors/error-codes';
+import { TX_OPTIONS, lockCourse } from 'src/common/helpers/locks';
 
 @Injectable()
 export class EnrollmentService {
@@ -18,25 +19,34 @@ export class EnrollmentService {
     studentId: string;
     courseId: string;
   }): Promise<EnrollmentResponseDto> {
-    const course = await this.prisma.course.findUnique({
-      where: { id: courseId, removedAt: null },
-    });
-    if (!course) {
-      throw new DomainException(
-        ErrorCodes.RESOURCE_NOT_FOUND,
-        HttpStatus.NOT_FOUND,
-        'Invalid courseId',
-      );
-    }
-
     return await this.prisma.$transaction(async (tx) => {
+      if (!(await lockCourse(tx, courseId))) {
+        throw new DomainException(
+          ErrorCodes.RESOURCE_NOT_FOUND,
+          HttpStatus.NOT_FOUND,
+          'Invalid courseId',
+        );
+      }
+
+      const course = await tx.course.findUnique({
+        where: { id: courseId, removedAt: null },
+        select: { maxSeats: true },
+      });
+      if (!course) {
+        throw new DomainException(
+          ErrorCodes.RESOURCE_NOT_FOUND,
+          HttpStatus.NOT_FOUND,
+          'Invalid courseId',
+        );
+      }
+
       const existing = await tx.enrollment.findUnique({
         where: {
           studentId_courseId: { studentId, courseId },
-          removedAt: null,
         },
+        select: { id: true, removedAt: true },
       });
-      if (existing) {
+      if (existing && existing.removedAt === null) {
         throw new DomainException(
           ErrorCodes.ALREADY_ENROLLED,
           HttpStatus.CONFLICT,
@@ -47,6 +57,7 @@ export class EnrollmentService {
       const claimed = await tx.course.updateMany({
         where: {
           id: courseId,
+          removedAt: null,
           enrollmentCount: { lt: course.maxSeats },
         },
         data: {
@@ -56,33 +67,59 @@ export class EnrollmentService {
       if (claimed.count === 0) {
         throw new DomainException(
           ErrorCodes.CAPACITY_FULL,
-          HttpStatus.BAD_REQUEST,
+          HttpStatus.UNPROCESSABLE_ENTITY,
           'Course capacity full',
         );
       }
 
-      const enrollment = await tx.enrollment.create({
-        data: { studentId, courseId },
-        include: {
-          student: {
-            select: { fullName: true, email: true },
-          },
-          course: {
-            select: {
-              name: true,
-              educator: {
-                select: { fullName: true, email: true },
-              },
+      const include = {
+        student: {
+          select: { fullName: true, email: true },
+        },
+        course: {
+          select: {
+            name: true,
+            educator: {
+              select: { fullName: true, email: true },
             },
           },
         },
+      } as const;
+
+      let enrollment: Prisma.EnrollmentGetPayload<{ include: typeof include }>;
+      if (existing) {
+        const revived = await tx.enrollment.updateMany({
+          where: { id: existing.id, removedAt: { not: null } },
+          data: { removedAt: null },
+        });
+        if (revived.count === 0) {
+          throw new DomainException(
+            ErrorCodes.ALREADY_ENROLLED,
+            HttpStatus.CONFLICT,
+            'Already enrolled in this course',
+          );
+        }
+        enrollment = await tx.enrollment.findUniqueOrThrow({
+          where: { id: existing.id },
+          include,
+        });
+      } else {
+        enrollment = await tx.enrollment.create({
+          data: { studentId, courseId },
+          include,
+        });
+      }
+
+      await tx.attendance.upsert({
+        where: {
+          studentId_courseId: { studentId, courseId },
+        },
+        create: { studentId, courseId },
+        update: { removedAt: null, totalLectures: 0, watchedLectures: 0 },
       });
 
-      await tx.attendance.create({
-        data: { studentId, courseId },
-      });
       return enrollment;
-    });
+    }, TX_OPTIONS);
   }
 
   async getById(id: string): Promise<EnrollmentResponseDto> {
@@ -167,6 +204,7 @@ export class EnrollmentService {
           courseId,
           removedAt: null,
         },
+        orderBy: [{ createdAt: 'desc' }, { id: 'asc' }],
         include: {
           student: {
             select: { fullName: true, email: true },
@@ -209,6 +247,7 @@ export class EnrollmentService {
     const [enrollments, total] = await this.prisma.$transaction([
       this.prisma.enrollment.findMany({
         where,
+        orderBy: [{ createdAt: 'desc' }, { id: 'asc' }],
         skip: (page - 1) * limit,
         take: limit,
         include: {
@@ -239,21 +278,34 @@ export class EnrollmentService {
 
   async removeById(id: string) {
     await this.prisma.$transaction(async (tx) => {
+      const found = await tx.enrollment.findUnique({
+        where: { id, removedAt: null },
+        select: { courseId: true, studentId: true },
+      });
+      if (!found) {
+        throw new DomainException(
+          ErrorCodes.RESOURCE_NOT_FOUND,
+          HttpStatus.NOT_FOUND,
+          'Enrollment not found',
+        );
+      }
+
+      await lockCourse(tx, found.courseId);
+
+      const now = new Date();
       const enrollment = await tx.enrollment.update({
         where: { id, removedAt: null },
-        data: { removedAt: new Date() },
+        data: { removedAt: now },
         select: { studentId: true, courseId: true },
       });
 
-      await tx.attendance.update({
+      await tx.attendance.updateMany({
         where: {
-          studentId_courseId: {
-            studentId: enrollment.studentId,
-            courseId: enrollment.courseId,
-          },
+          studentId: enrollment.studentId,
+          courseId: enrollment.courseId,
           removedAt: null,
         },
-        data: { removedAt: new Date() },
+        data: { removedAt: now },
       });
 
       const remove = await tx.course.updateMany({
@@ -267,12 +319,12 @@ export class EnrollmentService {
       });
       if (remove.count === 0) {
         throw new DomainException(
-          ErrorCodes.CONFLICT,
-          HttpStatus.BAD_REQUEST,
-          "Couldn't remove the enrollment",
+          ErrorCodes.INTERNAL_ERROR,
+          HttpStatus.INTERNAL_SERVER_ERROR,
+          'Stored course enrollment counts are inconsistent',
         );
       }
-    });
+    }, TX_OPTIONS);
   }
 
   async removeByStudent({
@@ -283,20 +335,20 @@ export class EnrollmentService {
     courseId: string;
   }) {
     await this.prisma.$transaction(async (tx) => {
+      await lockCourse(tx, courseId);
+
+      const now = new Date();
       const enrollment = await tx.enrollment.update({
         where: {
           studentId_courseId: { studentId, courseId },
           removedAt: null,
         },
-        data: { removedAt: new Date() },
+        data: { removedAt: now },
       });
 
-      await tx.attendance.update({
-        where: {
-          studentId_courseId: { studentId, courseId },
-          removedAt: null,
-        },
-        data: { removedAt: new Date() },
+      await tx.attendance.updateMany({
+        where: { studentId, courseId, removedAt: null },
+        data: { removedAt: now },
       });
 
       const remove = await tx.course.updateMany({
@@ -310,11 +362,11 @@ export class EnrollmentService {
       });
       if (remove.count === 0) {
         throw new DomainException(
-          ErrorCodes.CONFLICT,
-          HttpStatus.BAD_REQUEST,
-          "Couldn't remove the enrollment",
+          ErrorCodes.INTERNAL_ERROR,
+          HttpStatus.INTERNAL_SERVER_ERROR,
+          'Stored course enrollment counts are inconsistent',
         );
       }
-    });
+    }, TX_OPTIONS);
   }
 }

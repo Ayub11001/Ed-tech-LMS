@@ -1,4 +1,4 @@
-import { Controller, Get, Param, Query, UseGuards } from '@nestjs/common';
+import { Controller, Get, Query, UseGuards } from '@nestjs/common';
 import { ApiOperation, ApiParam, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { JwtAuthGuard } from 'src/common/guards/jwt-auth.guard';
 import { RolesGuard } from 'src/common/guards/roles.guard';
@@ -6,6 +6,7 @@ import { AttendanceService } from './attendance.service';
 import { Roles } from 'src/common/decorators/role.decorator';
 import { Role } from '@prisma/client';
 import { GetUser } from 'src/common/decorators/get-user.decorator';
+import { UuidParam } from 'src/common/dto/uuid-param.decorator';
 import { AttendanceResponseDto } from './dto/attendance_response.dto';
 import { PaginatedSearchQueryDto } from 'src/common/dto/paginated_search_query.dto';
 import { PaginatedResponseDto } from 'src/common/dto/paginated_response.dto';
@@ -51,7 +52,7 @@ export class AttendanceController {
   @ApiPaginatedResponse(AttendanceResponseDto)
   @ApiErrorResponses()
   async getCourseAttendance(
-    @Param('courseId') id: string,
+    @UuidParam('courseId') id: string,
     @Query() dto: PaginatedSearchQueryDto,
   ): Promise<PaginatedResponseDto<AttendanceResponseDto>> {
     return await this.attendanceService.getByCourse(id, dto);
@@ -91,7 +92,7 @@ export class AttendanceController {
     type: AttendanceResponseDto,
   })
   @ApiErrorResponses()
-  async getById(@Param('id') id: string): Promise<AttendanceResponseDto> {
+  async getById(@UuidParam('id') id: string): Promise<AttendanceResponseDto> {
     return await this.attendanceService.getById(id);
   }
 }

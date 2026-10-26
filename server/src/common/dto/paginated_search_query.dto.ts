@@ -1,6 +1,13 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
-import { IsInt, IsOptional, IsPositive, IsString, Max } from 'class-validator';
+import {
+  IsInt,
+  IsOptional,
+  IsPositive,
+  IsString,
+  Max,
+  MaxLength,
+} from 'class-validator';
 
 export class PaginatedSearchQueryDto {
   @ApiPropertyOptional({
@@ -9,6 +16,7 @@ export class PaginatedSearchQueryDto {
   })
   @IsOptional()
   @IsString()
+  @MaxLength(75)
   search: string;
 
   @ApiPropertyOptional({

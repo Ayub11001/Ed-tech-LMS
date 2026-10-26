@@ -88,7 +88,7 @@ export class ComplaintsService {
   async getByStudent(studentId: string): Promise<ComplaintResponseDto[]> {
     const complaints = await this.prisma.complaint.findMany({
       where: { studentId, removedAt: null },
-      orderBy: { createdAt: 'desc' },
+      orderBy: [{ createdAt: 'desc' }, { id: 'asc' }],
       select: this.complaintSelect,
     });
 
@@ -98,7 +98,7 @@ export class ComplaintsService {
   async getByEducator(educatorId: string): Promise<ComplaintResponseDto[]> {
     const complaints = await this.prisma.complaint.findMany({
       where: { educatorId, removedAt: null },
-      orderBy: { createdAt: 'desc' },
+      orderBy: [{ createdAt: 'desc' }, { id: 'asc' }],
       select: this.complaintSelect,
     });
 
@@ -124,6 +124,7 @@ export class ComplaintsService {
     const [complaints, total] = await this.prisma.$transaction([
       this.prisma.complaint.findMany({
         where,
+        orderBy: [{ createdAt: 'desc' }, { id: 'asc' }],
         select: this.complaintSelect,
         skip: (page - 1) * limit,
         take: limit,
