@@ -104,7 +104,7 @@ export class ComplaintsController {
     description: 'Complaint updated',
     type: ComplaintResponseDto,
   })
-  @ApiErrorResponses()
+  @ApiErrorResponses({ 409: 'Complaint is not pending' })
   async processComplaint(
     @UuidParam('id') id: string,
   ): Promise<ComplaintResponseDto> {

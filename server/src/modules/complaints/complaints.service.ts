@@ -142,12 +142,40 @@ export class ComplaintsService {
   }
 
   async process(id: string): Promise<ComplaintResponseDto> {
-    const updatedComplaint = await this.prisma.complaint.update({
-      where: { id },
-      data: { status: ComplaintStatus.PROCESSING },
-      select: this.complaintSelect,
+    return await this.prisma.$transaction(async (tx) => {
+      const claimed = await tx.complaint.updateMany({
+        where: {
+          id,
+          removedAt: null,
+          status: ComplaintStatus.PENDING,
+        },
+        data: { status: ComplaintStatus.PROCESSING },
+      });
+
+      if (claimed.count === 0) {
+        const existing = await tx.complaint.findUnique({
+          where: { id },
+          select: { removedAt: true },
+        });
+        if (!existing || existing.removedAt) {
+          throw new DomainException(
+            ErrorCodes.RESOURCE_NOT_FOUND,
+            HttpStatus.NOT_FOUND,
+            'Complaint not found',
+          );
+        }
+        throw new DomainException(
+          ErrorCodes.CONFLICT,
+          HttpStatus.CONFLICT,
+          'Complaint is not pending',
+        );
+      }
+
+      return await tx.complaint.findUniqueOrThrow({
+        where: { id },
+        select: this.complaintSelect,
+      });
     });
-    return updatedComplaint;
   }
 
   async resolve(
