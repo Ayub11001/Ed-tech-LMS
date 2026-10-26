@@ -5,6 +5,7 @@ import { RolesGuard } from 'src/common/guards/roles.guard';
 import { AttendanceService } from './attendance.service';
 import { Roles } from 'src/common/decorators/role.decorator';
 import { Role } from '@prisma/client';
+import type { CourseRequester } from 'src/common/helpers/course-access';
 import { GetUser } from 'src/common/decorators/get-user.decorator';
 import { UuidParam } from 'src/common/dto/uuid-param.decorator';
 import { AttendanceResponseDto } from './dto/attendance_response.dto';
@@ -54,8 +55,9 @@ export class AttendanceController {
   async getCourseAttendance(
     @UuidParam('courseId') id: string,
     @Query() dto: PaginatedSearchQueryDto,
+    @GetUser() requester: CourseRequester,
   ): Promise<PaginatedResponseDto<AttendanceResponseDto>> {
-    return await this.attendanceService.getByCourse(id, dto);
+    return await this.attendanceService.getByCourse(id, dto, requester);
   }
 
   @Get('admin')

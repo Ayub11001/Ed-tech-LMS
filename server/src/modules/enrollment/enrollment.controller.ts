@@ -17,6 +17,7 @@ import { UuidParam } from 'src/common/dto/uuid-param.decorator';
 import { EnrollmentResponseDto } from './dto/enrollment_response.dto';
 import { Roles } from 'src/common/decorators/role.decorator';
 import { Role } from '@prisma/client';
+import type { CourseRequester } from 'src/common/helpers/course-access';
 import { PaginatedResponseDto } from 'src/common/dto/paginated_response.dto';
 import { PaginatedSearchQueryDto } from 'src/common/dto/paginated_search_query.dto';
 import { ApiAuth } from 'src/common/swagger/decorators/api-auth.decorator';
@@ -112,8 +113,9 @@ export class EnrollmentController {
   async getCourseEnrollments(
     @UuidParam('courseId') id: string,
     @Query() dto: PaginatedSearchQueryDto,
+    @GetUser() requester: CourseRequester,
   ): Promise<PaginatedResponseDto<EnrollmentResponseDto>> {
-    return await this.enrollmentService.getByCourse(id, dto);
+    return await this.enrollmentService.getByCourse(id, dto, requester);
   }
 
   // Admin endpoints

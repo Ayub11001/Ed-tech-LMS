@@ -6,6 +6,10 @@ import { PaginatedResponseDto } from 'src/common/dto/paginated_response.dto';
 import { Prisma } from '@prisma/client';
 import { DomainException } from '../../common/errors/domain.exceptions';
 import { ErrorCodes } from '../../common/errors/error-codes';
+import {
+  assertCourseAccess,
+  CourseRequester,
+} from '../../common/helpers/course-access';
 
 @Injectable()
 export class AttendanceService {
@@ -47,11 +51,13 @@ export class AttendanceService {
   async getByCourse(
     courseId: string,
     dto: PaginatedSearchQueryDto,
+    requester: CourseRequester,
   ): Promise<PaginatedResponseDto<AttendanceResponseDto>> {
     const { page, limit } = dto;
 
     const existingCourse = await this.prisma.course.findUnique({
       where: { id: courseId, removedAt: null },
+      select: { educatorId: true },
     });
     if (!existingCourse) {
       throw new DomainException(
@@ -60,6 +66,7 @@ export class AttendanceService {
         'Course with id not found',
       );
     }
+    assertCourseAccess(existingCourse, requester);
 
     const [attendances, total] = await this.prisma.$transaction([
       this.prisma.attendance.findMany({

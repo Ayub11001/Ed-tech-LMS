@@ -9,6 +9,11 @@ import { PaginatedResponseDto } from 'src/common/dto/paginated_response.dto';
 import { PaginatedSearchQueryDto } from 'src/common/dto/paginated_search_query.dto';
 import { DomainException } from '../../common/errors/domain.exceptions';
 import { ErrorCodes } from '../../common/errors/error-codes';
+import {
+  assertCourseAccess,
+  CourseRequester,
+} from '../../common/helpers/course-access';
+import { lockCourse, TX_OPTIONS } from '../../common/helpers/locks';
 
 @Injectable()
 export class CoursesService {
@@ -96,30 +101,38 @@ export class CoursesService {
   }
 
   async delete(courseId: string): Promise<void> {
-    const course = await this.prisma.course.findUnique({
-      where: { id: courseId, removedAt: null },
-      select: {
-        _count: {
-          select: { enrollments: { where: { removedAt: null } } },
-        },
-      },
-    });
-    if (!course) {
-      throw new DomainException(
-        ErrorCodes.RESOURCE_NOT_FOUND,
-        HttpStatus.NOT_FOUND,
-        'Course with ID not found',
-      );
-    }
-    if (course._count.enrollments > 0) {
-      throw new DomainException(
-        ErrorCodes.RELATED_RESOURCE_EXISTS,
-        HttpStatus.CONFLICT,
-        'Students are already enrolled',
-      );
-    }
-
     await this.prisma.$transaction(async (tx) => {
+      if (!(await lockCourse(tx, courseId))) {
+        throw new DomainException(
+          ErrorCodes.RESOURCE_NOT_FOUND,
+          HttpStatus.NOT_FOUND,
+          'Course with ID not found',
+        );
+      }
+
+      const course = await tx.course.findUnique({
+        where: { id: courseId, removedAt: null },
+        select: {
+          _count: {
+            select: { enrollments: { where: { removedAt: null } } },
+          },
+        },
+      });
+      if (!course) {
+        throw new DomainException(
+          ErrorCodes.RESOURCE_NOT_FOUND,
+          HttpStatus.NOT_FOUND,
+          'Course with ID not found',
+        );
+      }
+      if (course._count.enrollments > 0) {
+        throw new DomainException(
+          ErrorCodes.RELATED_RESOURCE_EXISTS,
+          HttpStatus.CONFLICT,
+          'Students are already enrolled',
+        );
+      }
+
       await tx.attendance.updateMany({
         where: { courseId, removedAt: null },
         data: { removedAt: new Date() },
@@ -129,7 +142,7 @@ export class CoursesService {
         where: { id: courseId },
         data: { removedAt: new Date(), enrollmentCount: 0 },
       });
-    });
+    }, TX_OPTIONS);
   }
 
   async getMany(
@@ -205,11 +218,13 @@ export class CoursesService {
   async getStudents(
     courseId: string,
     dto: PaginatedSearchQueryDto,
+    requester: CourseRequester,
   ): Promise<PaginatedResponseDto<StudentResponseDto>> {
     const { page, limit } = dto;
 
     const course = await this.prisma.course.findUnique({
       where: { id: courseId, removedAt: null },
+      select: { educatorId: true },
     });
     if (!course) {
       throw new DomainException(
@@ -218,6 +233,7 @@ export class CoursesService {
         'Course with id not found',
       );
     }
+    assertCourseAccess(course, requester);
     const [students, total] = await this.prisma.$transaction([
       this.prisma.enrollment.findMany({
         where: { courseId, removedAt: null },

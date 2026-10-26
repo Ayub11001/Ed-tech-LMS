@@ -8,6 +8,10 @@ import { DomainException } from '../../common/errors/domain.exceptions';
 import { ErrorCodes } from '../../common/errors/error-codes';
 import { TX_OPTIONS, lockCourse, lockUser } from 'src/common/helpers/locks';
 import { releaseSeat } from 'src/common/helpers/release-seats';
+import {
+  assertCourseAccess,
+  CourseRequester,
+} from 'src/common/helpers/course-access';
 
 @Injectable()
 export class EnrollmentService {
@@ -205,11 +209,13 @@ export class EnrollmentService {
   async getByCourse(
     courseId: string,
     dto: PaginatedSearchQueryDto,
+    requester: CourseRequester,
   ): Promise<PaginatedResponseDto<EnrollmentResponseDto>> {
     const { page, limit } = dto;
 
     const course = await this.prisma.course.findUnique({
       where: { id: courseId, removedAt: null },
+      select: { educatorId: true },
     });
     if (!course) {
       throw new DomainException(
@@ -218,6 +224,7 @@ export class EnrollmentService {
         'Course with id not found',
       );
     }
+    assertCourseAccess(course, requester);
 
     const [enrollments, total] = await this.prisma.$transaction([
       this.prisma.enrollment.findMany({

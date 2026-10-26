@@ -9,6 +9,8 @@ import { LoginDto } from './dto/login.dto';
 import { ConfigService } from '@nestjs/config';
 import { DomainException } from '../../common/errors/domain.exceptions';
 import { ErrorCodes } from '../../common/errors/error-codes';
+import { lockUser, TX_OPTIONS } from '../../common/helpers/locks';
+import { hashRefreshToken, verifyRefreshToken } from './helpers/refresh-token';
 
 @Injectable()
 export class AuthService {
@@ -67,7 +69,10 @@ export class AuthService {
     }
 
     const tokens = await this.generateTokens(user.id, user.email);
-    const hashedToken = await bcrypt.hash(tokens.refreshToken, 8);
+    const hashedToken = await hashRefreshToken(
+      tokens.refreshToken,
+      this.SALT_ROUNDS,
+    );
 
     await this.prisma.user.update({
       where: { id: user.id },
@@ -113,7 +118,10 @@ export class AuthService {
     }
 
     const tokens = await this.generateTokens(existingUser.id, email);
-    const hashedToken = await bcrypt.hash(tokens.refreshToken, 8);
+    const hashedToken = await hashRefreshToken(
+      tokens.refreshToken,
+      this.SALT_ROUNDS,
+    );
     const user = await this.prisma.user.update({
       where: { id: existingUser.id },
       data: { refreshToken: hashedToken },
@@ -131,41 +139,77 @@ export class AuthService {
     };
   }
 
-  async refreshTokens(userId: string): Promise<{
+  async refreshTokens(
+    userId: string,
+    presentedToken: string | undefined,
+  ): Promise<{
     authResponse: AuthResponseDto;
     tokens: {
       accessToken: string;
       refreshToken: string;
     };
   }> {
-    const user = await this.prisma.user.findUnique({
-      where: { id: userId },
-      select: {
-        id: true,
-        fullName: true,
-        email: true,
-        role: true,
-      },
-    });
-    if (!user) {
-      throw new DomainException(
-        ErrorCodes.RESOURCE_NOT_FOUND,
-        HttpStatus.NOT_FOUND,
-        'User not found',
+    return await this.prisma.$transaction(async (tx) => {
+      if (!(await lockUser(tx, userId))) {
+        throw new DomainException(
+          ErrorCodes.UNAUTHORIZED,
+          HttpStatus.UNAUTHORIZED,
+          'Invalid or expired refresh token',
+        );
+      }
+
+      const user = await tx.user.findUnique({
+        where: { id: userId, removedAt: null },
+        select: {
+          id: true,
+          fullName: true,
+          email: true,
+          role: true,
+          refreshToken: true,
+        },
+      });
+      if (!user || !user.refreshToken || !presentedToken) {
+        throw new DomainException(
+          ErrorCodes.UNAUTHORIZED,
+          HttpStatus.UNAUTHORIZED,
+          'Invalid or expired refresh token',
+        );
+      }
+
+      const validToken = await verifyRefreshToken(
+        presentedToken,
+        user.refreshToken,
       );
-    }
+      if (!validToken) {
+        throw new DomainException(
+          ErrorCodes.UNAUTHORIZED,
+          HttpStatus.UNAUTHORIZED,
+          'Invalid or expired refresh token',
+        );
+      }
 
-    const tokens = await this.generateTokens(userId, user.email);
-    const hashedToken = await bcrypt.hash(tokens.refreshToken, 8);
-    await this.prisma.user.update({
-      where: { id: userId },
-      data: { refreshToken: hashedToken },
-    });
+      const tokens = await this.generateTokens(user.id, user.email);
+      const hashedToken = await hashRefreshToken(
+        tokens.refreshToken,
+        this.SALT_ROUNDS,
+      );
+      await tx.user.update({
+        where: { id: user.id },
+        data: { refreshToken: hashedToken },
+      });
 
-    return {
-      authResponse: user,
-      tokens,
-    };
+      const authResponse: AuthResponseDto = {
+        id: user.id,
+        fullName: user.fullName,
+        email: user.email,
+        role: user.role,
+      };
+
+      return {
+        authResponse,
+        tokens,
+      };
+    }, TX_OPTIONS);
   }
 
   async logout(userId: string): Promise<void> {

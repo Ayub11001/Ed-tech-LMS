@@ -15,6 +15,7 @@ import { CoursesService } from './courses.service';
 import { CreateCourseDto } from './dtos/create_course.dto';
 import { Roles } from 'src/common/decorators/role.decorator';
 import { Role } from '@prisma/client';
+import type { CourseRequester } from 'src/common/helpers/course-access';
 import { JwtAuthGuard } from 'src/common/guards/jwt-auth.guard';
 import { RolesGuard } from 'src/common/guards/roles.guard';
 import { CourseResponseDto } from './dtos/course_response.dto';
@@ -55,8 +56,9 @@ export class CoursesController {
   async getStudents(
     @UuidParam('id') id: string,
     @Query() dto: PaginatedSearchQueryDto,
+    @GetUser() requester: CourseRequester,
   ): Promise<PaginatedResponseDto<StudentResponseDto>> {
-    return await this.courseService.getStudents(id, dto);
+    return await this.courseService.getStudents(id, dto, requester);
   }
 
   // ADMIN

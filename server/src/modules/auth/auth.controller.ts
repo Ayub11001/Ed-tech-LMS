@@ -4,6 +4,7 @@ import {
   HttpCode,
   HttpStatus,
   Post,
+  Req,
   Res,
   UseGuards,
 } from '@nestjs/common';
@@ -16,7 +17,7 @@ import {
 } from '@nestjs/swagger';
 import { AuthService } from './auth.service';
 import { RegisterDto } from './dto/register.dto';
-import type { CookieOptions, Response } from 'express';
+import type { CookieOptions, Request, Response } from 'express';
 import { AuthResponseDto } from './dto/auth-response.dto';
 import { Roles } from 'src/common/decorators/role.decorator';
 import { Role } from '@prisma/client';
@@ -136,11 +137,18 @@ export class AuthController {
   })
   @ApiErrorResponses({ 401: 'Invalid or expired refresh token' })
   async refreshToken(
+    @Req() req: Request,
     @Res({ passthrough: true }) res: Response,
     @GetUser('id') userId: string,
   ): Promise<AuthResponseDto> {
-    const { authResponse, tokens } =
-      await this.authService.refreshTokens(userId);
+    const cookies = req.cookies as
+      | Record<string, string | undefined>
+      | undefined;
+
+    const { authResponse, tokens } = await this.authService.refreshTokens(
+      userId,
+      cookies?.refreshToken,
+    );
 
     res.cookie('accessToken', tokens.accessToken, this.cookieOptions);
     res.cookie('refreshToken', tokens.refreshToken, this.cookieOptions);
